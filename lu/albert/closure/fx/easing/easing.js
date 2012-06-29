@@ -10,6 +10,7 @@ goog.provides('lu.albert.closure.fx.easing');
 lu.albert.closure.fx.easing.Back = function() {
 };
 
+
 /**
  * Ease In function.
  *
@@ -27,6 +28,7 @@ lu.albert.closure.fx.easing.Back.easeIn = function(t, b, c, d, s) {
   return c * (t /= d) * t * ((s + 1) * t - s) + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -43,6 +45,7 @@ lu.albert.closure.fx.easing.Back.easeOut = function(t, b, c, d, s) {
   }
   return c * ((t = t / d - 1) * t * ((s + 1) * t + s) + 1) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -72,6 +75,7 @@ lu.albert.closure.fx.easing.Back.easeInOut = function(t, b, c, d, s) {
 lu.albert.closure.fx.easing.Bounce = function() {
 };
 
+
 /**
  * Ease Out function.
  *
@@ -93,6 +97,7 @@ lu.albert.closure.fx.easing.Bounce.easeOut = function(t, b, c, d) {
   }
 };
 
+
 /**
  * Ease In function.
  *
@@ -105,6 +110,7 @@ lu.albert.closure.fx.easing.Bounce.easeOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Bounce.easeIn = function(t, b, c, d) {
   return c - lu.albert.closure.fx.easing.Bounce.easeOut(d - t, 0, c, d) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -119,15 +125,18 @@ lu.albert.closure.fx.easing.Bounce.easeInOut = function(t, b, c, d) {
   if (t < d / 2) {
     return lu.albert.closure.fx.easing.Bounce.easeIn(t * 2, 0, c, d) * .5 + b;
   } else {
-    return lu.albert.closure.fx.easing.Bounce.easeOut(t * 2 - d, 0, c, d) * .5 + c * .5 + b;
+    return lu.albert.closure.fx.easing.Bounce.easeOut(t * 2 - d, 0, c, d) *
+        .5 + c * .5 + b;
   }
 };
+
 
 /**
  * Circular accelleration.
  */
 lu.albert.closure.fx.easing.Circ = function() {
 };
+
 
 /**
  * Ease In function.
@@ -142,6 +151,7 @@ lu.albert.closure.fx.easing.Circ.easeIn = function(t, b, c, d) {
   return -c * (Math.sqrt(1 - (t /= d) * t) - 1) + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -154,6 +164,7 @@ lu.albert.closure.fx.easing.Circ.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Circ.easeOut = function(t, b, c, d) {
   return c * Math.sqrt(1 - (t = t / d - 1) * t) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -178,6 +189,7 @@ lu.albert.closure.fx.easing.Circ.easeInOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Cubic = function() {
 };
 
+
 /**
  * Ease In function.
  *
@@ -191,6 +203,7 @@ lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
   return c * (t /= d) * t * t + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -203,6 +216,7 @@ lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Cubic.easeOut = function(t, b, c, d) {
   return c * ((t = t / d - 1) * t * t + 1) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -228,6 +242,7 @@ lu.albert.closure.fx.easing.Cubic.easeInOut = function(t, b, c, d) {
  */
 lu.albert.closure.fx.easing.Elastic = function() {
 };
+
 
 /**
  * Ease In function.
@@ -259,8 +274,10 @@ lu.albert.closure.fx.easing.Elastic.easeIn = function(t, b, c, d, a, p) {
   } else {
     var s = p / (2 * Math.PI) * Math.asin(c / a);
   }
-  return -(a * Math.pow(2, 10 * (t -= 1)) * Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
+  return -(a * Math.pow(2, 10 * (t -= 1)) *
+      Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
 };
+
 
 /**
  * Ease Out function.
@@ -292,8 +309,10 @@ lu.albert.closure.fx.easing.Elastic.easeOut = function(t, b, c, d, a, p) {
   }
 
   else var s = p / (2 * Math.PI) * Math.asin(c / a);
-  return (a * Math.pow(2, -10 * t) * Math.sin((t * d - s) * (2 * Math.PI) / p) + c + b);
+  return (a * Math.pow(2, -10 * t) *
+      Math.sin((t * d - s) * (2 * Math.PI) / p) + c + b);
 };
+
 
 /**
  * Ease InOut function.
@@ -327,10 +346,12 @@ lu.albert.closure.fx.easing.Elastic.easeInOut = function(t, b, c, d, a, p) {
   }
 
   if (t < 1) {
-    return -.5 * (a * Math.pow(2, 10 * (t -= 1)) * Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
+    return -.5 * (a * Math.pow(2, 10 * (t -= 1)) *
+        Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
   }
 
-  return a * Math.pow(2, - 10 * (t -= 1)) * Math.sin((t * d - s) * (2 * Math.PI) / p) * .5 + c + b;
+  return a * Math.pow(2, - 10 * (t -= 1)) *
+      Math.sin((t * d - s) * (2 * Math.PI) / p) * .5 + c + b;
 };
 
 
@@ -339,6 +360,7 @@ lu.albert.closure.fx.easing.Elastic.easeInOut = function(t, b, c, d, a, p) {
  */
 lu.albert.closure.fx.easing.Expo = function() {
 };
+
 
 /**
  * Ease In function.
@@ -356,6 +378,7 @@ lu.albert.closure.fx.easing.Expo.easeIn = function(t, b, c, d) {
   return c * Math.pow(2, 10 * (t / d - 1)) + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -371,6 +394,7 @@ lu.albert.closure.fx.easing.Expo.easeOut = function(t, b, c, d) {
   }
   return c * (-Math.pow(2, -10 * t / d) + 1) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -404,6 +428,7 @@ lu.albert.closure.fx.easing.Expo.easeInOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Linear = function() {
 };
 
+
 /**
  * This is just here for completeness. It calculates the position using a
  * linear speed. No acceleration, so it's fairly uninteresting.
@@ -417,6 +442,7 @@ lu.albert.closure.fx.easing.Linear = function() {
 lu.albert.closure.fx.easing.Linear.easeNone = function(t, b, c, d) {
   return c * t / d + b;
 };
+
 
 /**
  * Ease In function.
@@ -432,6 +458,7 @@ lu.albert.closure.fx.easing.Linear.easeIn = function(t, b, c, d) {
   return c * t / d + b;
 };
 
+
 /**
  * Ease Out function.
  * Identical to ``easeNone``.
@@ -445,6 +472,7 @@ lu.albert.closure.fx.easing.Linear.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Linear.easeOut = function(t, b, c, d) {
   return c * t / d + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -466,6 +494,7 @@ lu.albert.closure.fx.easing.Linear.easeInOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Quad = function() {
 };
 
+
 /**
  * Ease In function.
  *
@@ -479,6 +508,7 @@ lu.albert.closure.fx.easing.Quad.easeIn = function(t, b, c, d) {
   return c * (t /= d) * t + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -491,6 +521,7 @@ lu.albert.closure.fx.easing.Quad.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Quad.easeOut = function(t, b, c, d) {
   return -c * (t /= d) * (t - 2) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -516,6 +547,7 @@ lu.albert.closure.fx.easing.Quad.easeInOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Quart = function() {
 };
 
+
 /**
  * Ease In function.
  *
@@ -529,6 +561,7 @@ lu.albert.closure.fx.easing.Quart.easeIn = function(t, b, c, d) {
   return c * (t /= d) * t * t * t + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -541,6 +574,7 @@ lu.albert.closure.fx.easing.Quart.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Quart.easeOut = function(t, b, c, d) {
   return -c * ((t = t / d - 1) * t * t * t - 1) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -566,6 +600,7 @@ lu.albert.closure.fx.easing.Quart.easeInOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Quint = function() {
 };
 
+
 /**
  * Ease In function.
  *
@@ -579,6 +614,7 @@ lu.albert.closure.fx.easing.Quint.easeIn = function(t, b, c, d) {
   return c * (t /= d) * t * t * t * t + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -591,6 +627,7 @@ lu.albert.closure.fx.easing.Quint.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Quint.easeOut = function(t, b, c, d) {
   return c * ((t = t / d - 1) * t * t * t * t + 1) + b;
 };
+
 
 /**
  * Ease InOut function.
@@ -616,6 +653,7 @@ lu.albert.closure.fx.easing.Quint.easeInOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Sine = function() {
 };
 
+
 /**
  * Ease In function.
  *
@@ -629,6 +667,7 @@ lu.albert.closure.fx.easing.Sine.easeIn = function(t, b, c, d) {
   return -c * Math.cos(t / d * (Math.PI / 2)) + c + b;
 };
 
+
 /**
  * Ease Out function.
  *
@@ -641,6 +680,7 @@ lu.albert.closure.fx.easing.Sine.easeIn = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Sine.easeOut = function(t, b, c, d) {
   return c * Math.sin(t / d * (Math.PI / 2)) + b;
 };
+
 
 /**
  * Ease InOut function.

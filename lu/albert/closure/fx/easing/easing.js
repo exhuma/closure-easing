@@ -1,4 +1,5 @@
-goog.provides('lu.albert.closure.fx.easing');
+
+goog.provide('lu.albert.closure.fx.easing');
 
 
 /**

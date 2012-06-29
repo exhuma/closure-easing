@@ -103,7 +103,7 @@ lu.albert.closure.fx.easing.Bounce.easeOut = function(t, b, c, d) {
  * @return {float} The position at time t.
  */
 lu.albert.closure.fx.easing.Bounce.easeIn = function(t, b, c, d) {
-  return c - com.robertpenner.easing.Bounce.easeOut(d - t, 0, c, d) + b;
+  return c - lu.albert.closure.fx.easing.Bounce.easeOut(d - t, 0, c, d) + b;
 };
 
 /**
@@ -117,9 +117,9 @@ lu.albert.closure.fx.easing.Bounce.easeIn = function(t, b, c, d) {
  */
 lu.albert.closure.fx.easing.Bounce.easeInOut = function(t, b, c, d) {
   if (t < d / 2) {
-    return com.robertpenner.easing.Bounce.easeIn(t * 2, 0, c, d) * .5 + b;
+    return lu.albert.closure.fx.easing.Bounce.easeIn(t * 2, 0, c, d) * .5 + b;
   } else {
-    return com.robertpenner.easing.Bounce.easeOut(t * 2 - d, 0, c, d) * .5 + c * .5 + b;
+    return lu.albert.closure.fx.easing.Bounce.easeOut(t * 2 - d, 0, c, d) * .5 + c * .5 + b;
   }
 };
 

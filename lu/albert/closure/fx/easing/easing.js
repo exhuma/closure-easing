@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Easing functions. Useful for the goog.fx.Animation package.
+ *
+ * The easing functions are based on the code provided by
+ * http://www.robertpenner.com/easing/ (as of 2012-06-29)
+ */
 
 goog.provide('lu.albert.closure.fx.easing');
 

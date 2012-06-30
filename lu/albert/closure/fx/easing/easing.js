@@ -529,24 +529,30 @@ lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
 };
 
 
-// /**
-//  * Ease InOut function.
-//  *
-//  * @param {float} t time.
-//  * @param {float} b begin.
-//  * @param {float} c change.
-//  * @param {float} d duration (in ms).
-//  * @return {float} The position at time t.
-//  */
-// lu.albert.closure.fx.easing.Quad.easeInOut = function(t, b, c, d) {
-//   if ((t /= d / 2) < 1) {
-//     return c / 2 * t * t + b;
-//   }
-// 
-//   return -c / 2 * ((--t) * (t - 2) - 1) + b;
-// };
-// 
-// 
+/**
+ * Ease InOut function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
+  var out = p;
+  if (p < 0.5) {
+    out = Math.pow(2 * p * Math.sqrt(0.5), 2);
+  } else {
+    out = -Math.pow(2 * (p-1) * Math.sqrt(0.5), 2)+1;
+  }
+
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+
+  return out;
+};
+
+
 // /**
 //  * Quartic (x^4) accelleration.
 //  */

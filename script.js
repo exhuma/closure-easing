@@ -15950,6 +15950,1342 @@ goog.debug.DivConsole.prototype.addSeparator = function() {
 goog.debug.DivConsole.prototype.clear = function() {
   this.element_.innerHTML = '';
 };
+// Copyright 2012 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Bidi utility functions.
+ *
+ */
+
+goog.provide('goog.style.bidi');
+
+goog.require('goog.dom');
+goog.require('goog.style');
+goog.require('goog.userAgent');
+
+
+/**
+ * Returns the normalized scrollLeft position for a scrolled element.
+ * @param {Element} element The scrolled element.
+ * @return {number} The number of pixels the element is scrolled. 0 indicates
+ *     that the element is not scrolled at all (which, in general, is the
+ *     left-most position in ltr and the right-most position in rtl).
+ */
+goog.style.bidi.getScrollLeft = function(element) {
+  var isRtl = goog.style.isRightToLeft(element);
+  if (isRtl && goog.userAgent.GECKO) {
+    // ScrollLeft starts at 0 and then goes negative as the element is scrolled
+    // towards the left.
+    return -element.scrollLeft;
+  } else if (isRtl && !(goog.userAgent.IE && goog.userAgent.isVersion('8'))) {
+    // ScrollLeft starts at the maximum positive value and decreases towards
+    // 0 as the element is scrolled towards the left.
+    return element.scrollWidth - element.clientWidth - element.scrollLeft;
+  }
+  // ScrollLeft behavior is identical in rtl and ltr, it starts at 0 and
+  // increases as the element is scrolled away from the start.
+  return element.scrollLeft;
+};
+
+
+/**
+ * Returns the "offsetStart" of an element, analagous to offsetLeft but
+ * normalized for right-to-left environments and various browser
+ * inconsistencies. This value returned can always be passed to setScrollOffset
+ * to scroll to an element's left edge in a left-to-right offsetParent or
+ * right edge in a right-to-left offsetParent.
+ *
+ * For example, here offsetStart is 10px in an LTR environment and 5px in RTL:
+ *
+ * <pre>
+ * |          xxxxxxxxxx     |
+ *  ^^^^^^^^^^   ^^^^   ^^^^^
+ *     10px      elem    5px
+ * </pre>
+ *
+ * If an element is positioned before the start of its offsetParent, the
+ * startOffset may be negative.  This can be used with setScrollOffset to
+ * reliably scroll to an element:
+ *
+ * <pre>
+ * var scrollOffset = goog.style.bidi.getOffsetStart(element);
+ * goog.style.bidi.setScrollOffset(element.offsetParent, scrollOffset);
+ * </pre>
+ *
+ * @see setScrollOffset
+ *
+ * @param {Element} element The element for which we need to determine the
+ *     offsetStart position.
+ * @return {number} The offsetStart for that element.
+ */
+goog.style.bidi.getOffsetStart = function(element) {
+  var offsetLeftForReal = element.offsetLeft;
+
+  // The element might not have an offsetParent.
+  // For example, the node might not be attached to the DOM tree,
+  // and position:fixed children do not have an offset parent.
+  // Just try to do the best we can with what we have.
+  var bestParent = element.offsetParent;
+
+  if (!bestParent && goog.style.getComputedPosition(element) == 'fixed') {
+    bestParent = goog.dom.getOwnerDocument(element).documentElement;
+  }
+
+  // Just give up in this case.
+  if (!bestParent) {
+    return offsetLeftForReal;
+  }
+
+  if (goog.userAgent.GECKO) {
+    // When calculating an element's offsetLeft, Firefox erroneously subtracts
+    // the border width from the actual distance.  So we need to add it back.
+    var borderWidths = goog.style.getBorderBox(bestParent);
+    offsetLeftForReal += borderWidths.left;
+  } else if (goog.userAgent.isDocumentMode(8)) {
+    // When calculating an element's offsetLeft, IE8-Standards Mode erroneously
+    // adds the border width to the actual distance.  So we need to subtract it.
+    var borderWidths = goog.style.getBorderBox(bestParent);
+    offsetLeftForReal -= borderWidths.left;
+  }
+
+  if (goog.style.isRightToLeft(bestParent)) {
+    // Right edge of the element relative to the left edge of its parent.
+    var elementRightOffset = offsetLeftForReal + element.offsetWidth;
+
+    // Distance from the parent's right edge to the element's right edge.
+    return bestParent.clientWidth - elementRightOffset;
+  }
+
+  return offsetLeftForReal;
+};
+
+
+/**
+ * Sets the element's scrollLeft attribute so it is correctly scrolled by
+ * offsetStart pixels.  This takes into account whether the element is RTL and
+ * the nuances of different browsers.  To scroll to the "beginning" of an
+ * element use getOffsetStart to obtain the element's offsetStart value and then
+ * pass the value to setScrollOffset.
+ * @see getOffsetStart
+ * @param {Element} element The element to set scrollLeft on.
+ * @param {number} offsetStart The number of pixels to scroll the element.
+ *     If this value is < 0, 0 is used.
+ */
+goog.style.bidi.setScrollOffset = function(element, offsetStart) {
+  offsetStart = Math.max(offsetStart, 0);
+  // In LTR and in "mirrored" browser RTL (such as IE), we set scrollLeft to
+  // the number of pixels to scroll.
+  // Otherwise, in RTL, we need to account for different browser behavior.
+  if (!goog.style.isRightToLeft(element)) {
+    element.scrollLeft = offsetStart;
+  } else if (goog.userAgent.GECKO) {
+    // Negative scroll-left positions in RTL.
+    element.scrollLeft = -offsetStart;
+  } else if (!(goog.userAgent.IE && goog.userAgent.isVersion('8'))) {
+    // Take the current scrollLeft value and move to the right by the
+    // offsetStart to get to the left edge of the element, and then by
+    // the clientWidth of the element to get to the right edge.
+    element.scrollLeft =
+        element.scrollWidth - offsetStart - element.clientWidth;
+  } else {
+    element.scrollLeft = offsetStart;
+  }
+};
+
+
+/**
+ * Sets the element's left style attribute in LTR or right style attribute in
+ * RTL.  Also clears the left attribute in RTL and the right attribute in LTR.
+ * @param {Element} elem The element to position.
+ * @param {number} left The left position in LTR; will be set as right in RTL.
+ * @param {?number} top The top position.  If null only the left/right is set.
+ * @param {boolean} isRtl Whether we are in RTL mode.
+ */
+goog.style.bidi.setPosition = function(elem, left, top, isRtl) {
+  if (!goog.isNull(top)) {
+    elem.style.top = top + 'px';
+  }
+  if (isRtl) {
+    elem.style.right = left + 'px';
+    elem.style.left = '';
+  } else {
+    elem.style.left = left + 'px';
+    elem.style.right = '';
+  }
+};
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Common positioning code.
+ *
+ */
+
+goog.provide('goog.positioning');
+goog.provide('goog.positioning.Corner');
+goog.provide('goog.positioning.CornerBit');
+goog.provide('goog.positioning.Overflow');
+goog.provide('goog.positioning.OverflowStatus');
+
+goog.require('goog.asserts');
+goog.require('goog.dom');
+goog.require('goog.dom.TagName');
+goog.require('goog.math.Box');
+goog.require('goog.math.Coordinate');
+goog.require('goog.math.Size');
+goog.require('goog.style');
+goog.require('goog.style.bidi');
+
+
+/**
+ * Enum for representing an element corner for positioning the popup.
+ *
+ * The START constants map to LEFT if element directionality is left
+ * to right and RIGHT if the directionality is right to left.
+ * Likewise END maps to RIGHT or LEFT depending on the directionality.
+ *
+ * @enum {number}
+ */
+goog.positioning.Corner = {
+  TOP_LEFT: 0,
+  TOP_RIGHT: 2,
+  BOTTOM_LEFT: 1,
+  BOTTOM_RIGHT: 3,
+  TOP_START: 4,
+  TOP_END: 6,
+  BOTTOM_START: 5,
+  BOTTOM_END: 7
+};
+
+
+/**
+ * Enum for bits in the {@see goog.positioning.Corner) bitmap.
+ *
+ * @enum {number}
+ */
+goog.positioning.CornerBit = {
+  BOTTOM: 1,
+  RIGHT: 2,
+  FLIP_RTL: 4
+};
+
+
+/**
+ * Enum for representing position handling in cases where the element would be
+ * positioned outside the viewport.
+ *
+ * @enum {number}
+ */
+goog.positioning.Overflow = {
+  /** Ignore overflow */
+  IGNORE: 0,
+
+  /** Try to fit horizontally in the viewport at all costs. */
+  ADJUST_X: 1,
+
+  /** If the element can't fit horizontally, report positioning failure. */
+  FAIL_X: 2,
+
+  /** Try to fit vertically in the viewport at all costs. */
+  ADJUST_Y: 4,
+
+  /** If the element can't fit vertically, report positioning failure. */
+  FAIL_Y: 8,
+
+  /** Resize the element's width to fit in the viewport. */
+  RESIZE_WIDTH: 16,
+
+  /** Resize the element's height to fit in the viewport. */
+  RESIZE_HEIGHT: 32,
+
+  /**
+   * If the anchor goes off-screen in the x-direction, position the movable
+   * element off-screen. Otherwise, try to fit horizontally in the viewport.
+   */
+  ADJUST_X_EXCEPT_OFFSCREEN: 64 | 1,
+
+  /**
+   * If the anchor goes off-screen in the y-direction, position the movable
+   * element off-screen. Otherwise, try to fit vertically in the viewport.
+   */
+  ADJUST_Y_EXCEPT_OFFSCREEN: 128 | 4
+};
+
+
+/**
+ * Enum for representing the outcome of a positioning call.
+ *
+ * @enum {number}
+ */
+goog.positioning.OverflowStatus = {
+  NONE: 0,
+  ADJUSTED_X: 1,
+  ADJUSTED_Y: 2,
+  WIDTH_ADJUSTED: 4,
+  HEIGHT_ADJUSTED: 8,
+  FAILED_LEFT: 16,
+  FAILED_RIGHT: 32,
+  FAILED_TOP: 64,
+  FAILED_BOTTOM: 128,
+  FAILED_OUTSIDE_VIEWPORT: 256
+};
+
+
+/**
+ * Shorthand to check if a status code contains any fail code.
+ * @type {number}
+ */
+goog.positioning.OverflowStatus.FAILED =
+    goog.positioning.OverflowStatus.FAILED_LEFT |
+    goog.positioning.OverflowStatus.FAILED_RIGHT |
+    goog.positioning.OverflowStatus.FAILED_TOP |
+    goog.positioning.OverflowStatus.FAILED_BOTTOM |
+    goog.positioning.OverflowStatus.FAILED_OUTSIDE_VIEWPORT;
+
+
+/**
+ * Shorthand to check if horizontal positioning failed.
+ * @type {number}
+ */
+goog.positioning.OverflowStatus.FAILED_HORIZONTAL =
+    goog.positioning.OverflowStatus.FAILED_LEFT |
+    goog.positioning.OverflowStatus.FAILED_RIGHT;
+
+
+/**
+ * Shorthand to check if vertical positioning failed.
+ * @type {number}
+ */
+goog.positioning.OverflowStatus.FAILED_VERTICAL =
+    goog.positioning.OverflowStatus.FAILED_TOP |
+    goog.positioning.OverflowStatus.FAILED_BOTTOM;
+
+
+/**
+ * Positions a movable element relative to an anchor element. The caller
+ * specifies the corners that should touch. This functions then moves the
+ * movable element accordingly.
+ *
+ * @param {Element} anchorElement The element that is the anchor for where
+ *    the movable element should position itself.
+ * @param {goog.positioning.Corner} anchorElementCorner The corner of the
+ *     anchorElement for positioning the movable element.
+ * @param {Element} movableElement The element to move.
+ * @param {goog.positioning.Corner} movableElementCorner The corner of the
+ *     movableElement that that should be positioned adjacent to the anchor
+ *     element.
+ * @param {goog.math.Coordinate=} opt_offset An offset specified in pixels.
+ *    After the normal positioning algorithm is applied, the offset is then
+ *    applied. Positive coordinates move the popup closer to the center of the
+ *    anchor element. Negative coordinates move the popup away from the center
+ *    of the anchor element.
+ * @param {goog.math.Box=} opt_margin A margin specified in pixels.
+ *    After the normal positioning algorithm is applied and any offset, the
+ *    margin is then applied. Positive coordinates move the popup away from the
+ *    spot it was positioned towards its center. Negative coordinates move it
+ *    towards the spot it was positioned away from its center.
+ * @param {?number=} opt_overflow Overflow handling mode. Defaults to IGNORE if
+ *     not specified. Bitmap, {@see goog.positioning.Overflow}.
+ * @param {goog.math.Size=} opt_preferredSize The preferred size of the
+ *     movableElement.
+ * @param {goog.math.Box=} opt_viewport Box object describing the dimensions of
+ *     the viewport. If not provided, a default one will be calculated by the
+ *     position of the anchorElement and its moveable parent element.
+ * @return {goog.positioning.OverflowStatus} Status bitmap,
+ *     {@see goog.positioning.OverflowStatus}.
+ */
+goog.positioning.positionAtAnchor = function(anchorElement,
+                                             anchorElementCorner,
+                                             movableElement,
+                                             movableElementCorner,
+                                             opt_offset,
+                                             opt_margin,
+                                             opt_overflow,
+                                             opt_preferredSize,
+                                             opt_viewport) {
+
+  goog.asserts.assert(movableElement);
+  var movableParentTopLeft =
+      goog.positioning.getOffsetParentPageOffset(movableElement);
+
+  // Get the visible part of the anchor element.  anchorRect is
+  // relative to anchorElement's page.
+  var anchorRect = goog.positioning.getVisiblePart_(anchorElement);
+
+  // Translate anchorRect to be relative to movableElement's page.
+  goog.style.translateRectForAnotherFrame(
+      anchorRect,
+      goog.dom.getDomHelper(anchorElement),
+      goog.dom.getDomHelper(movableElement));
+
+  // Offset based on which corner of the element we want to position against.
+  var corner = goog.positioning.getEffectiveCorner(anchorElement,
+                                                   anchorElementCorner);
+  // absolutePos is a candidate position relative to the
+  // movableElement's window.
+  var absolutePos = new goog.math.Coordinate(
+      corner & goog.positioning.CornerBit.RIGHT ?
+          anchorRect.left + anchorRect.width : anchorRect.left,
+      corner & goog.positioning.CornerBit.BOTTOM ?
+          anchorRect.top + anchorRect.height : anchorRect.top);
+
+  // Translate absolutePos to be relative to the offsetParent.
+  absolutePos =
+      goog.math.Coordinate.difference(absolutePos, movableParentTopLeft);
+
+  // Apply offset, if specified
+  if (opt_offset) {
+    absolutePos.x += (corner & goog.positioning.CornerBit.RIGHT ? -1 : 1) *
+        opt_offset.x;
+    absolutePos.y += (corner & goog.positioning.CornerBit.BOTTOM ? -1 : 1) *
+        opt_offset.y;
+  }
+
+  // Determine dimension of viewport.
+  var viewport;
+  if (opt_overflow) {
+    if (opt_viewport) {
+      viewport = opt_viewport;
+    } else {
+      viewport = goog.style.getVisibleRectForElement(movableElement);
+      if (viewport) {
+        viewport.top -= movableParentTopLeft.y;
+        viewport.right -= movableParentTopLeft.x;
+        viewport.bottom -= movableParentTopLeft.y;
+        viewport.left -= movableParentTopLeft.x;
+      }
+    }
+  }
+
+  return goog.positioning.positionAtCoordinate(absolutePos,
+                                               movableElement,
+                                               movableElementCorner,
+                                               opt_margin,
+                                               viewport,
+                                               opt_overflow,
+                                               opt_preferredSize);
+};
+
+
+/**
+ * Calculates the page offset of the given element's
+ * offsetParent. This value can be used to translate any x- and
+ * y-offset relative to the page to an offset relative to the
+ * offsetParent, which can then be used directly with as position
+ * coordinate for {@code positionWithCoordinate}.
+ * @param {!Element} movableElement The element to calculate.
+ * @return {!goog.math.Coordinate} The page offset, may be (0, 0).
+ */
+goog.positioning.getOffsetParentPageOffset = function(movableElement) {
+  // Ignore offset for the BODY element unless its position is non-static.
+  // For cases where the offset parent is HTML rather than the BODY (such as in
+  // IE strict mode) there's no need to get the position of the BODY as it
+  // doesn't affect the page offset.
+  var movableParentTopLeft;
+  var parent = movableElement.offsetParent;
+  if (parent) {
+    var isBody = parent.tagName == goog.dom.TagName.HTML ||
+        parent.tagName == goog.dom.TagName.BODY;
+    if (!isBody ||
+        goog.style.getComputedPosition(parent) != 'static') {
+      // Get the top-left corner of the parent, in page coordinates.
+      movableParentTopLeft = goog.style.getPageOffset(parent);
+
+      if (!isBody) {
+        movableParentTopLeft = goog.math.Coordinate.difference(
+            movableParentTopLeft,
+            new goog.math.Coordinate(goog.style.bidi.getScrollLeft(parent),
+                parent.scrollTop));
+      }
+    }
+  }
+
+  return movableParentTopLeft || new goog.math.Coordinate();
+};
+
+
+/**
+ * Returns intersection of the specified element and
+ * goog.style.getVisibleRectForElement for it.
+ *
+ * @param {Element} el The target element.
+ * @return {goog.math.Rect} Intersection of getVisibleRectForElement
+ *     and the current bounding rectangle of the element.  If the
+ *     intersection is empty, returns the bounding rectangle.
+ * @private
+ */
+goog.positioning.getVisiblePart_ = function(el) {
+  var rect = goog.style.getBounds(el);
+  var visibleBox = goog.style.getVisibleRectForElement(el);
+  if (visibleBox) {
+    rect.intersection(goog.math.Rect.createFromBox(visibleBox));
+  }
+  return rect;
+};
+
+
+/**
+ * Positions the specified corner of the movable element at the
+ * specified coordinate.
+ *
+ * @param {goog.math.Coordinate} absolutePos The coordinate to position the
+ *     element at.
+ * @param {Element} movableElement The element to be positioned.
+ * @param {goog.positioning.Corner} movableElementCorner The corner of the
+ *     movableElement that that should be positioned.
+ * @param {goog.math.Box=} opt_margin A margin specified in pixels.
+ *    After the normal positioning algorithm is applied and any offset, the
+ *    margin is then applied. Positive coordinates move the popup away from the
+ *    spot it was positioned towards its center. Negative coordinates move it
+ *    towards the spot it was positioned away from its center.
+ * @param {goog.math.Box=} opt_viewport Box object describing the dimensions of
+ *     the viewport. Required if opt_overflow is specified.
+ * @param {?number=} opt_overflow Overflow handling mode. Defaults to IGNORE if
+ *     not specified, {@see goog.positioning.Overflow}.
+ * @param {goog.math.Size=} opt_preferredSize The preferred size of the
+ *     movableElement. Defaults to the current size.
+ * @return {goog.positioning.OverflowStatus} Status bitmap.
+ */
+goog.positioning.positionAtCoordinate = function(absolutePos,
+                                                 movableElement,
+                                                 movableElementCorner,
+                                                 opt_margin,
+                                                 opt_viewport,
+                                                 opt_overflow,
+                                                 opt_preferredSize) {
+  absolutePos = absolutePos.clone();
+  var status = goog.positioning.OverflowStatus.NONE;
+
+  // Offset based on attached corner and desired margin.
+  var corner = goog.positioning.getEffectiveCorner(movableElement,
+                                                   movableElementCorner);
+  var elementSize = goog.style.getSize(movableElement);
+  var size = opt_preferredSize ? opt_preferredSize.clone() :
+      elementSize.clone();
+
+  if (opt_margin || corner != goog.positioning.Corner.TOP_LEFT) {
+    if (corner & goog.positioning.CornerBit.RIGHT) {
+      absolutePos.x -= size.width + (opt_margin ? opt_margin.right : 0);
+    } else if (opt_margin) {
+      absolutePos.x += opt_margin.left;
+    }
+    if (corner & goog.positioning.CornerBit.BOTTOM) {
+      absolutePos.y -= size.height + (opt_margin ? opt_margin.bottom : 0);
+    } else if (opt_margin) {
+      absolutePos.y += opt_margin.top;
+    }
+  }
+
+  // Adjust position to fit inside viewport.
+  if (opt_overflow) {
+    status = opt_viewport ?
+        goog.positioning.adjustForViewport_(
+            absolutePos, size, opt_viewport, opt_overflow) :
+        goog.positioning.OverflowStatus.FAILED_OUTSIDE_VIEWPORT;
+    if (status & goog.positioning.OverflowStatus.FAILED) {
+      return status;
+    }
+  }
+
+  goog.style.setPosition(movableElement, absolutePos);
+  if (!goog.math.Size.equals(elementSize, size)) {
+    goog.style.setBorderBoxSize(movableElement, size);
+  }
+
+  return status;
+};
+
+
+/**
+ * Adjusts the position and/or size of an element, identified by its position
+ * and size, to fit inside the viewport. If the position or size of the element
+ * is adjusted the pos or size objects, respectively, are modified.
+ *
+ * @param {goog.math.Coordinate} pos Position of element, updated if the
+ *     position is adjusted.
+ * @param {goog.math.Size} size Size of element, updated if the size is
+ *     adjusted.
+ * @param {goog.math.Box} viewport Bounding box describing the viewport.
+ * @param {number} overflow Overflow handling mode,
+ *     {@see goog.positioning.Overflow}.
+ * @return {goog.positioning.OverflowStatus} Status bitmap,
+ *     {@see goog.positioning.OverflowStatus}.
+ * @private
+ */
+goog.positioning.adjustForViewport_ = function(pos, size, viewport, overflow) {
+  var status = goog.positioning.OverflowStatus.NONE;
+
+  var ADJUST_X_EXCEPT_OFFSCREEN =
+      goog.positioning.Overflow.ADJUST_X_EXCEPT_OFFSCREEN;
+  var ADJUST_Y_EXCEPT_OFFSCREEN =
+      goog.positioning.Overflow.ADJUST_Y_EXCEPT_OFFSCREEN;
+  if ((overflow & ADJUST_X_EXCEPT_OFFSCREEN) == ADJUST_X_EXCEPT_OFFSCREEN &&
+      (pos.x < viewport.left || pos.x >= viewport.right)) {
+    overflow &= ~goog.positioning.Overflow.ADJUST_X;
+  }
+  if ((overflow & ADJUST_Y_EXCEPT_OFFSCREEN) == ADJUST_Y_EXCEPT_OFFSCREEN &&
+      (pos.y < viewport.top || pos.y >= viewport.bottom)) {
+    overflow &= ~goog.positioning.Overflow.ADJUST_Y;
+  }
+
+  // Left edge outside viewport, try to move it.
+  if (pos.x < viewport.left && overflow & goog.positioning.Overflow.ADJUST_X) {
+    pos.x = viewport.left;
+    status |= goog.positioning.OverflowStatus.ADJUSTED_X;
+  }
+
+  // Left edge inside and right edge outside viewport, try to resize it.
+  if (pos.x < viewport.left &&
+      pos.x + size.width > viewport.right &&
+      overflow & goog.positioning.Overflow.RESIZE_WIDTH) {
+    size.width = Math.max(
+        size.width - ((pos.x + size.width) - viewport.right), 0);
+    status |= goog.positioning.OverflowStatus.WIDTH_ADJUSTED;
+  }
+
+  // Right edge outside viewport, try to move it.
+  if (pos.x + size.width > viewport.right &&
+      overflow & goog.positioning.Overflow.ADJUST_X) {
+    pos.x = Math.max(viewport.right - size.width, viewport.left);
+    status |= goog.positioning.OverflowStatus.ADJUSTED_X;
+  }
+
+  // Left or right edge still outside viewport, fail if the FAIL_X option was
+  // specified, ignore it otherwise.
+  if (overflow & goog.positioning.Overflow.FAIL_X) {
+    status |= (pos.x < viewport.left ?
+                   goog.positioning.OverflowStatus.FAILED_LEFT : 0) |
+              (pos.x + size.width > viewport.right ?
+                   goog.positioning.OverflowStatus.FAILED_RIGHT : 0);
+  }
+
+  // Top edge outside viewport, try to move it.
+  if (pos.y < viewport.top && overflow & goog.positioning.Overflow.ADJUST_Y) {
+    pos.y = viewport.top;
+    status |= goog.positioning.OverflowStatus.ADJUSTED_Y;
+  }
+
+  // Top edge inside and bottom edge outside viewport, try to resize it.
+  if (pos.y >= viewport.top &&
+      pos.y + size.height > viewport.bottom &&
+      overflow & goog.positioning.Overflow.RESIZE_HEIGHT) {
+    size.height = Math.max(
+        size.height - ((pos.y + size.height) - viewport.bottom), 0);
+    status |= goog.positioning.OverflowStatus.HEIGHT_ADJUSTED;
+  }
+
+  // Bottom edge outside viewport, try to move it.
+  if (pos.y + size.height > viewport.bottom &&
+      overflow & goog.positioning.Overflow.ADJUST_Y) {
+    pos.y = Math.max(viewport.bottom - size.height, viewport.top);
+    status |= goog.positioning.OverflowStatus.ADJUSTED_Y;
+  }
+
+  // Top or bottom edge still outside viewport, fail if the FAIL_Y option was
+  // specified, ignore it otherwise.
+  if (overflow & goog.positioning.Overflow.FAIL_Y) {
+    status |= (pos.y < viewport.top ?
+                   goog.positioning.OverflowStatus.FAILED_TOP : 0) |
+              (pos.y + size.height > viewport.bottom ?
+                   goog.positioning.OverflowStatus.FAILED_BOTTOM : 0);
+  }
+
+  return status;
+};
+
+
+/**
+ * Returns an absolute corner (top/bottom left/right) given an absolute
+ * or relative (top/bottom start/end) corner and the direction of an element.
+ * Absolute corners remain unchanged.
+ * @param {Element} element DOM element to test for RTL direction.
+ * @param {goog.positioning.Corner} corner The popup corner used for
+ *     positioning.
+ * @return {goog.positioning.Corner} Effective corner.
+ */
+goog.positioning.getEffectiveCorner = function(element, corner) {
+  return /** @type {goog.positioning.Corner} */ (
+      (corner & goog.positioning.CornerBit.FLIP_RTL &&
+          goog.style.isRightToLeft(element) ?
+          corner ^ goog.positioning.CornerBit.RIGHT :
+          corner
+      ) & ~goog.positioning.CornerBit.FLIP_RTL);
+};
+
+
+/**
+ * Returns the corner opposite the given one horizontally.
+ * @param {goog.positioning.Corner} corner The popup corner used to flip.
+ * @return {goog.positioning.Corner} The opposite corner horizontally.
+ */
+goog.positioning.flipCornerHorizontal = function(corner) {
+  return /** @type {goog.positioning.Corner} */ (corner ^
+      goog.positioning.CornerBit.RIGHT);
+};
+
+
+/**
+ * Returns the corner opposite the given one vertically.
+ * @param {goog.positioning.Corner} corner The popup corner used to flip.
+ * @return {goog.positioning.Corner} The opposite corner vertically.
+ */
+goog.positioning.flipCornerVertical = function(corner) {
+  return /** @type {goog.positioning.Corner} */ (corner ^
+      goog.positioning.CornerBit.BOTTOM);
+};
+
+
+/**
+ * Returns the corner opposite the given one horizontally and vertically.
+ * @param {goog.positioning.Corner} corner The popup corner used to flip.
+ * @return {goog.positioning.Corner} The opposite corner horizontally and
+ *     vertically.
+ */
+goog.positioning.flipCorner = function(corner) {
+  return /** @type {goog.positioning.Corner} */ (corner ^
+      goog.positioning.CornerBit.BOTTOM ^
+      goog.positioning.CornerBit.RIGHT);
+};
+
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Abstract base class for positioning implementations.
+ *
+ * @author eae@google.com (Emil A Eklund)
+ */
+
+goog.provide('goog.positioning.AbstractPosition');
+
+goog.require('goog.math.Box');
+goog.require('goog.math.Size');
+goog.require('goog.positioning.Corner');
+
+
+
+/**
+ * Abstract position object. Encapsulates position and overflow handling.
+ *
+ * @constructor
+ */
+goog.positioning.AbstractPosition = function() {};
+
+
+/**
+ * Repositions the element. Abstract method, should be overloaded.
+ *
+ * @param {Element} movableElement Element to position.
+ * @param {goog.positioning.Corner} corner Corner of the movable element that
+ *     should be positioned adjacent to the anchored element.
+ * @param {goog.math.Box=} opt_margin A margin specified in pixels.
+ * @param {goog.math.Size=} opt_preferredSize PreferredSize of the
+ *     movableElement.
+ */
+goog.positioning.AbstractPosition.prototype.reposition =
+    function(movableElement, corner, opt_margin, opt_preferredSize) { };
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Client positioning class.
+ *
+ */
+
+goog.provide('goog.positioning.AnchoredPosition');
+
+goog.require('goog.math.Box');
+goog.require('goog.positioning');
+goog.require('goog.positioning.AbstractPosition');
+
+
+
+/**
+ * Encapsulates a popup position where the popup is anchored at a corner of
+ * an element.
+ *
+ * When using AnchoredPosition, it is recommended that the popup element
+ * specified in the Popup constructor or Popup.setElement be absolutely
+ * positioned.
+ *
+ * @param {Element} anchorElement Element the movable element should be
+ *     anchored against.
+ * @param {goog.positioning.Corner} corner Corner of anchored element the
+ *     movable element should be positioned at.
+ * @param {number=} opt_overflow Overflow handling mode. Defaults to IGNORE if
+ *     not specified. Bitmap, {@see goog.positioning.Overflow}.
+ * @constructor
+ * @extends {goog.positioning.AbstractPosition}
+ */
+goog.positioning.AnchoredPosition = function(anchorElement,
+                                             corner,
+                                             opt_overflow) {
+  /**
+   * Element the movable element should be anchored against.
+   * @type {Element}
+   */
+  this.element = anchorElement;
+
+  /**
+   * Corner of anchored element the movable element should be positioned at.
+   * @type {goog.positioning.Corner}
+   */
+  this.corner = corner;
+
+  /**
+   * Overflow handling mode. Defaults to IGNORE if not specified.
+   * Bitmap, {@see goog.positioning.Overflow}.
+   * @type {number|undefined}
+   * @private
+   */
+  this.overflow_ = opt_overflow;
+};
+goog.inherits(goog.positioning.AnchoredPosition,
+              goog.positioning.AbstractPosition);
+
+
+/**
+ * Repositions the movable element.
+ *
+ * @param {Element} movableElement Element to position.
+ * @param {goog.positioning.Corner} movableCorner Corner of the movable element
+ *     that should be positioned adjacent to the anchored element.
+ * @param {goog.math.Box=} opt_margin A margin specifin pixels.
+ * @param {goog.math.Size=} opt_preferredSize PreferredSize of the
+ *     movableElement (unused in this class).
+ * @override
+ */
+goog.positioning.AnchoredPosition.prototype.reposition = function(
+    movableElement, movableCorner, opt_margin, opt_preferredSize) {
+  goog.positioning.positionAtAnchor(this.element,
+                                    this.corner,
+                                    movableElement,
+                                    movableCorner,
+                                    undefined,
+                                    opt_margin,
+                                    this.overflow_);
+};
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Utilities for creating functions. Loosely inspired by the
+ * java classes: http://go/functions.java and http://go/predicate.java.
+ *
+ * @author nicksantos@google.com (Nick Santos)
+ */
+
+
+goog.provide('goog.functions');
+
+
+/**
+ * Creates a function that always returns the same value.
+ * @param {*} retValue The value to return.
+ * @return {!Function} The new function.
+ */
+goog.functions.constant = function(retValue) {
+  return function() {
+    return retValue;
+  };
+};
+
+
+/**
+ * Always returns false.
+ * @type {function(...): boolean}
+ */
+goog.functions.FALSE = goog.functions.constant(false);
+
+
+/**
+ * Always returns true.
+ * @type {function(...): boolean}
+ */
+goog.functions.TRUE = goog.functions.constant(true);
+
+
+/**
+ * Always returns NULL.
+ * @type {function(...): null}
+ */
+goog.functions.NULL = goog.functions.constant(null);
+
+
+/**
+ * A simple function that returns the first argument of whatever is passed
+ * into it.
+ * @param {*=} opt_returnValue The single value that will be returned.
+ * @param {...*} var_args Optional trailing arguments. These are ignored.
+ * @return {?} The first argument passed in, or undefined if nothing was passed.
+ *     We can't know the type -- just pass it along without type.
+ */
+goog.functions.identity = function(opt_returnValue, var_args) {
+  return opt_returnValue;
+};
+
+
+/**
+ * Creates a function that always throws an error with the given message.
+ * @param {string} message The error message.
+ * @return {!Function} The error-throwing function.
+ */
+goog.functions.error = function(message) {
+  return function() {
+    throw Error(message);
+  };
+};
+
+
+/**
+ * Given a function, create a function that silently discards all additional
+ * arguments.
+ * @param {Function} f The original function.
+ * @return {!Function} A version of f that discards its arguments.
+ */
+goog.functions.lock = function(f) {
+  return function() {
+    return f.call(this);
+  };
+};
+
+
+/**
+ * Given a function, create a new function that swallows its return value
+ * and replaces it with a new one.
+ * @param {Function} f A function.
+ * @param {*} retValue A new return value.
+ * @return {!Function} A new function.
+ */
+goog.functions.withReturnValue = function(f, retValue) {
+  return goog.functions.sequence(f, goog.functions.constant(retValue));
+};
+
+
+/**
+ * Creates the composition of the functions passed in.
+ * For example, (goog.functions.compose(f, g))(a) is equivalent to f(g(a)).
+ * @param {...Function} var_args A list of functions.
+ * @return {!Function} The composition of all inputs.
+ */
+goog.functions.compose = function(var_args) {
+  var functions = arguments;
+  var length = functions.length;
+  return function() {
+    var result;
+    if (length) {
+      result = functions[length - 1].apply(this, arguments);
+    }
+
+    for (var i = length - 2; i >= 0; i--) {
+      result = functions[i].call(this, result);
+    }
+    return result;
+  };
+};
+
+
+/**
+ * Creates a function that calls the functions passed in in sequence, and
+ * returns the value of the last function. For example,
+ * (goog.functions.sequence(f, g))(x) is equivalent to f(x),g(x).
+ * @param {...Function} var_args A list of functions.
+ * @return {!Function} A function that calls all inputs in sequence.
+ */
+goog.functions.sequence = function(var_args) {
+  var functions = arguments;
+  var length = functions.length;
+  return function() {
+    var result;
+    for (var i = 0; i < length; i++) {
+      result = functions[i].apply(this, arguments);
+    }
+    return result;
+  };
+};
+
+
+/**
+ * Creates a function that returns true if each of its components evaluates
+ * to true. The components are evaluated in order, and the evaluation will be
+ * short-circuited as soon as a function returns false.
+ * For example, (goog.functions.and(f, g))(x) is equivalent to f(x) && g(x).
+ * @param {...Function} var_args A list of functions.
+ * @return {!Function} A function that ANDs its component functions.
+ */
+goog.functions.and = function(var_args) {
+  var functions = arguments;
+  var length = functions.length;
+  return function() {
+    for (var i = 0; i < length; i++) {
+      if (!functions[i].apply(this, arguments)) {
+        return false;
+      }
+    }
+    return true;
+  };
+};
+
+
+/**
+ * Creates a function that returns true if any of its components evaluates
+ * to true. The components are evaluated in order, and the evaluation will be
+ * short-circuited as soon as a function returns true.
+ * For example, (goog.functions.or(f, g))(x) is equivalent to f(x) || g(x).
+ * @param {...Function} var_args A list of functions.
+ * @return {!Function} A function that ORs its component functions.
+ */
+goog.functions.or = function(var_args) {
+  var functions = arguments;
+  var length = functions.length;
+  return function() {
+    for (var i = 0; i < length; i++) {
+      if (functions[i].apply(this, arguments)) {
+        return true;
+      }
+    }
+    return false;
+  };
+};
+
+
+/**
+ * Creates a function that returns the Boolean opposite of a provided function.
+ * For example, (goog.functions.not(f))(x) is equivalent to !f(x).
+ * @param {!Function} f The original function.
+ * @return {!Function} A function that delegates to f and returns opposite.
+ */
+goog.functions.not = function(f) {
+  return function() {
+    return !f.apply(this, arguments);
+  };
+};
+
+
+/**
+ * Generic factory function to construct an object given the constructor
+ * and the arguments. Intended to be bound to create object factories.
+ *
+ * Callers should cast the result to the appropriate type for proper type
+ * checking by the compiler.
+ * @param {!Function} constructor The constructor for the Object.
+ * @param {...*} var_args The arguments to be passed to the constructor.
+ * @return {!Object} A new instance of the class given in {@code constructor}.
+ */
+goog.functions.create = function(constructor, var_args) {
+  /** @constructor */
+  var temp = function() {};
+  temp.prototype = constructor.prototype;
+
+  // obj will have constructor's prototype in its chain and
+  // 'obj instanceof constructor' will be true.
+  var obj = new temp();
+
+  // obj is initialized by constructor.
+  // arguments is only array-like so lacks shift(), but can be used with
+  // the Array prototype function.
+  constructor.apply(obj, Array.prototype.slice.call(arguments, 1));
+  return obj;
+};
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Anchored viewport positioning class.
+ *
+ * @author eae@google.com (Emil A Eklund)
+ */
+
+goog.provide('goog.positioning.AnchoredViewportPosition');
+
+goog.require('goog.functions');
+goog.require('goog.math.Box');
+goog.require('goog.positioning');
+goog.require('goog.positioning.AnchoredPosition');
+goog.require('goog.positioning.Corner');
+goog.require('goog.positioning.Overflow');
+goog.require('goog.positioning.OverflowStatus');
+
+
+
+/**
+ * Encapsulates a popup position where the popup is anchored at a corner of
+ * an element. The corners are swapped if dictated by the viewport. For instance
+ * if a popup is anchored with its top left corner to the bottom left corner of
+ * the anchor the popup is either displayed below the anchor (as specified) or
+ * above it if there's not enough room to display it below.
+ *
+ * When using this positioning object it's recommended that the movable element
+ * be absolutely positioned.
+ *
+ * @param {Element} anchorElement Element the movable element should be
+ *     anchored against.
+ * @param {goog.positioning.Corner} corner Corner of anchored element the
+ *     movable element should be positioned at.
+ * @param {boolean=} opt_adjust Whether the positioning should be adjusted until
+ *     the element fits inside the viewport even if that means that the anchored
+ *     corners are ignored.
+ * @param {goog.math.Box=} opt_overflowConstraint Box object describing the
+ *     dimensions in which the movable element could be shown.
+ * @constructor
+ * @extends {goog.positioning.AnchoredPosition}
+ */
+goog.positioning.AnchoredViewportPosition = function(anchorElement,
+                                                     corner,
+                                                     opt_adjust,
+                                                     opt_overflowConstraint) {
+  goog.positioning.AnchoredPosition.call(this, anchorElement, corner);
+
+  /**
+   * The last resort algorithm to use if the algorithm can't fit inside
+   * the viewport.
+   *
+   * IGNORE = do nothing, just display at the preferred position.
+   *
+   * ADJUST_X | ADJUST_Y = Adjust until the element fits, even if that means
+   * that the anchored corners are ignored.
+   *
+   * @type {number}
+   * @private
+   */
+  this.lastResortOverflow_ = opt_adjust ?
+      (goog.positioning.Overflow.ADJUST_X |
+       goog.positioning.Overflow.ADJUST_Y) :
+      goog.positioning.Overflow.IGNORE;
+
+  /**
+   * The dimensions in which the movable element could be shown.
+   * @type {goog.math.Box|undefined}
+   * @private
+   */
+  this.overflowConstraint_ = opt_overflowConstraint || undefined;
+};
+goog.inherits(goog.positioning.AnchoredViewportPosition,
+              goog.positioning.AnchoredPosition);
+
+
+/**
+ * @return {number} A bitmask for the "last resort" overflow.
+ */
+goog.positioning.AnchoredViewportPosition.prototype.getLastResortOverflow =
+    function() {
+  return this.lastResortOverflow_;
+};
+
+
+/**
+ * @param {number} lastResortOverflow A bitmask for the "last resort" overflow,
+ *     if we fail to fit the element on-screen.
+ */
+goog.positioning.AnchoredViewportPosition.prototype.setLastResortOverflow =
+    function(lastResortOverflow) {
+  this.lastResortOverflow_ = lastResortOverflow;
+};
+
+
+/**
+ * Repositions the movable element.
+ *
+ * @param {Element} movableElement Element to position.
+ * @param {goog.positioning.Corner} movableCorner Corner of the movable element
+ *     that should be positioned adjacent to the anchored element.
+ * @param {goog.math.Box=} opt_margin A margin specified in pixels.
+ * @param {goog.math.Size=} opt_preferredSize The preferred size of the
+ *     movableElement.
+ * @override
+ */
+goog.positioning.AnchoredViewportPosition.prototype.reposition = function(
+    movableElement, movableCorner, opt_margin, opt_preferredSize) {
+  var status = goog.positioning.positionAtAnchor(this.element, this.corner,
+      movableElement, movableCorner, null, opt_margin,
+      goog.positioning.Overflow.FAIL_X | goog.positioning.Overflow.FAIL_Y,
+      opt_preferredSize, this.overflowConstraint_);
+
+  // If the desired position is outside the viewport try mirroring the corners
+  // horizontally or vertically.
+  if (status & goog.positioning.OverflowStatus.FAILED) {
+    var cornerFallback = this.correctCorner_(status, this.corner);
+    var movableCornerFallback = this.correctCorner_(status, movableCorner);
+
+    status = goog.positioning.positionAtAnchor(this.element, cornerFallback,
+        movableElement, movableCornerFallback, null, opt_margin,
+        goog.positioning.Overflow.FAIL_X | goog.positioning.Overflow.FAIL_Y,
+        opt_preferredSize, this.overflowConstraint_);
+
+    if (status & goog.positioning.OverflowStatus.FAILED) {
+      // If that also fails, pick the best corner from the two tries,
+      // and adjust the position until it fits.
+      cornerFallback = this.correctCorner_(status, cornerFallback);
+      movableCornerFallback = this.correctCorner_(
+          status, movableCornerFallback);
+
+      goog.positioning.positionAtAnchor(this.element, cornerFallback,
+          movableElement, movableCornerFallback, null, opt_margin,
+          this.getLastResortOverflow(), opt_preferredSize,
+          this.overflowConstraint_);
+    }
+  }
+};
+
+
+/**
+ * Flip the given corner if X or Y positioning failed.
+ * @param {number} status The status of the last positionAtAnchor call.
+ * @param {goog.positioning.Corner} corner The corner to correct.
+ * @return {goog.positioning.Corner} The new corner.
+ * @private
+ */
+goog.positioning.AnchoredViewportPosition.prototype.correctCorner_ = function(
+    status, corner) {
+  if (status & goog.positioning.OverflowStatus.FAILED_HORIZONTAL) {
+    corner = goog.positioning.flipCornerHorizontal(corner);
+  }
+
+  if (status & goog.positioning.OverflowStatus.FAILED_VERTICAL) {
+    corner = goog.positioning.flipCornerVertical(corner);
+  }
+
+  return corner;
+};
+
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Anchored viewport positioning class with both adjust and
+ *     resize options for the popup.
+ *
+ * @author eae@google.com (Emil A Eklund)
+ * @author tildahl@google.com (Michael Tildahl)
+ */
+
+goog.provide('goog.positioning.MenuAnchoredPosition');
+
+goog.require('goog.math.Box');
+goog.require('goog.math.Size');
+goog.require('goog.positioning');
+goog.require('goog.positioning.AnchoredViewportPosition');
+goog.require('goog.positioning.Corner');
+goog.require('goog.positioning.Overflow');
+
+
+
+/**
+ * Encapsulates a popup position where the popup is anchored at a corner of
+ * an element.  The positioning behavior changes based on the values of
+ * opt_adjust and opt_resize.
+ *
+ * When using this positioning object it's recommended that the movable element
+ * be absolutely positioned.
+ *
+ * @param {Element} anchorElement Element the movable element should be
+ *     anchored against.
+ * @param {goog.positioning.Corner} corner Corner of anchored element the
+ *     movable element should be positioned at.
+ * @param {boolean=} opt_adjust Whether the positioning should be adjusted until
+ *     the element fits inside the viewport even if that means that the anchored
+ *     corners are ignored.
+ * @param {boolean=} opt_resize Whether the positioning should be adjusted until
+ *     the element fits inside the viewport on the X axis and its height is
+ *     resized so if fits in the viewport. This take precedence over opt_adjust.
+ * @constructor
+ * @extends {goog.positioning.AnchoredViewportPosition}
+ */
+goog.positioning.MenuAnchoredPosition = function(anchorElement,
+                                                 corner,
+                                                 opt_adjust,
+                                                 opt_resize) {
+  goog.positioning.AnchoredViewportPosition.call(this, anchorElement, corner,
+                                                 opt_adjust || opt_resize);
+
+  if (opt_adjust || opt_resize) {
+    var overflowX = goog.positioning.Overflow.ADJUST_X_EXCEPT_OFFSCREEN;
+    var overflowY = opt_resize ?
+        goog.positioning.Overflow.RESIZE_HEIGHT :
+        goog.positioning.Overflow.ADJUST_Y_EXCEPT_OFFSCREEN;
+    this.setLastResortOverflow(overflowX | overflowY);
+  }
+};
+goog.inherits(goog.positioning.MenuAnchoredPosition,
+              goog.positioning.AnchoredViewportPosition);
 // Copyright 2008 The Closure Library Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18626,6 +19962,342 @@ goog.debug.entryPointRegistry.register(
 // limitations under the License.
 
 /**
+ * @fileoverview Class to create objects which want to handle multiple events
+ * and have their listeners easily cleaned up via a dispose method.
+ *
+ * Example:
+ * <pre>
+ * function Something() {
+ *   goog.base(this);
+ *
+ *   ... set up object ...
+ *
+ *   // Add event listeners
+ *   this.listen(this.starEl, goog.events.EventType.CLICK, this.handleStar);
+ *   this.listen(this.headerEl, goog.events.EventType.CLICK, this.expand);
+ *   this.listen(this.collapseEl, goog.events.EventType.CLICK, this.collapse);
+ *   this.listen(this.infoEl, goog.events.EventType.MOUSEOVER, this.showHover);
+ *   this.listen(this.infoEl, goog.events.EventType.MOUSEOUT, this.hideHover);
+ * }
+ * goog.inherits(Something, goog.events.EventHandler);
+ *
+ * Something.prototype.disposeInternal = function() {
+ *   goog.base(this, 'disposeInternal');
+ *   goog.dom.removeNode(this.container);
+ * };
+ *
+ *
+ * // Then elsewhere:
+ *
+ * var activeSomething = null;
+ * function openSomething() {
+ *   activeSomething = new Something();
+ * }
+ *
+ * function closeSomething() {
+ *   if (activeSomething) {
+ *     activeSomething.dispose();  // Remove event listeners
+ *     activeSomething = null;
+ *   }
+ * }
+ * </pre>
+ *
+ */
+
+goog.provide('goog.events.EventHandler');
+
+goog.require('goog.Disposable');
+goog.require('goog.array');
+goog.require('goog.events');
+goog.require('goog.events.EventWrapper');
+
+
+
+/**
+ * Super class for objects that want to easily manage a number of event
+ * listeners.  It allows a short cut to listen and also provides a quick way
+ * to remove all events listeners belonging to this object.
+ * @param {Object=} opt_handler Object in whose scope to call the listeners.
+ * @constructor
+ * @extends {goog.Disposable}
+ */
+goog.events.EventHandler = function(opt_handler) {
+  goog.Disposable.call(this);
+  this.handler_ = opt_handler;
+
+  /**
+   * Keys for events that are being listened to.
+   * @type {Array.<number>}
+   * @private
+   */
+  this.keys_ = [];
+};
+goog.inherits(goog.events.EventHandler, goog.Disposable);
+
+
+/**
+ * Utility array used to unify the cases of listening for an array of types
+ * and listening for a single event, without using recursion or allocating
+ * an array each time.
+ * @type {Array.<string>}
+ * @private
+ */
+goog.events.EventHandler.typeArray_ = [];
+
+
+/**
+ * Listen to an event on a DOM node or EventTarget.  If the function is omitted
+ * then the EventHandler's handleEvent method will be used.
+ * @param {goog.events.EventTarget|EventTarget} src Event source.
+ * @param {string|Array.<string>} type Event type to listen for or array of
+ *     event types.
+ * @param {Function|Object=} opt_fn Optional callback function to be used as the
+ *    listener or an object with handleEvent function.
+ * @param {boolean=} opt_capture Optional whether to use capture phase.
+ * @param {Object=} opt_handler Object in whose scope to call the listener.
+ * @return {goog.events.EventHandler} This object, allowing for chaining of
+ *     calls.
+ */
+goog.events.EventHandler.prototype.listen = function(src, type, opt_fn,
+                                                     opt_capture,
+                                                     opt_handler) {
+  if (!goog.isArray(type)) {
+    goog.events.EventHandler.typeArray_[0] = /** @type {string} */(type);
+    type = goog.events.EventHandler.typeArray_;
+  }
+  for (var i = 0; i < type.length; i++) {
+    // goog.events.listen generates unique keys so we don't have to check their
+    // presence in the this.keys_ array.
+    var key = (/** @type {number} */
+        goog.events.listen(src, type[i], opt_fn || this,
+                           opt_capture || false,
+                           opt_handler || this.handler_ || this));
+    this.keys_.push(key);
+  }
+
+  return this;
+};
+
+
+/**
+ * Listen to an event on a DOM node or EventTarget.  If the function is omitted
+ * then the EventHandler's handleEvent method will be used. After the event has
+ * fired the event listener is removed from the target. If an array of event
+ * types is provided, each event type will be listened to once.
+ * @param {goog.events.EventTarget|EventTarget} src Event source.
+ * @param {string|Array.<string>} type Event type to listen for or array of
+ *     event types.
+ * @param {Function|Object=} opt_fn Optional callback function to be used as the
+ *    listener or an object with handleEvent function.
+ * @param {boolean=} opt_capture Optional whether to use capture phase.
+ * @param {Object=} opt_handler Object in whose scope to call the listener.
+ * @return {goog.events.EventHandler} This object, allowing for chaining of
+ *     calls.
+ */
+goog.events.EventHandler.prototype.listenOnce = function(src, type, opt_fn,
+                                                         opt_capture,
+                                                         opt_handler) {
+  if (goog.isArray(type)) {
+    for (var i = 0; i < type.length; i++) {
+      this.listenOnce(src, type[i], opt_fn, opt_capture, opt_handler);
+    }
+  } else {
+    var key = (/** @type {number} */
+        goog.events.listenOnce(src, type, opt_fn || this, opt_capture,
+                               opt_handler || this.handler_ || this));
+    this.keys_.push(key);
+  }
+
+  return this;
+};
+
+
+/**
+ * Adds an event listener with a specific event wrapper on a DOM Node or an
+ * object that has implemented {@link goog.events.EventTarget}. A listener can
+ * only be added once to an object.
+ *
+ * @param {EventTarget|goog.events.EventTarget} src The node to listen to
+ *     events on.
+ * @param {goog.events.EventWrapper} wrapper Event wrapper to use.
+ * @param {Function|Object} listener Callback method, or an object with a
+ *     handleEvent function.
+ * @param {boolean=} opt_capt Whether to fire in capture phase (defaults to
+ *     false).
+ * @param {Object=} opt_handler Element in whose scope to call the listener.
+ * @return {goog.events.EventHandler} This object, allowing for chaining of
+ *     calls.
+ */
+goog.events.EventHandler.prototype.listenWithWrapper = function(src, wrapper,
+    listener, opt_capt, opt_handler) {
+  wrapper.listen(src, listener, opt_capt, opt_handler || this.handler_ || this,
+                 this);
+  return this;
+};
+
+
+/**
+ * @return {number} Number of listeners registered by this handler.
+ */
+goog.events.EventHandler.prototype.getListenerCount = function() {
+  return this.keys_.length;
+};
+
+
+/**
+ * Unlistens on an event.
+ * @param {goog.events.EventTarget|EventTarget} src Event source.
+ * @param {string|Array.<string>} type Event type to listen for.
+ * @param {Function|Object=} opt_fn Optional callback function to be used as the
+ *    listener or an object with handleEvent function.
+ * @param {boolean=} opt_capture Optional whether to use capture phase.
+ * @param {Object=} opt_handler Object in whose scope to call the listener.
+ * @return {goog.events.EventHandler} This object, allowing for chaining of
+ *     calls.
+ */
+goog.events.EventHandler.prototype.unlisten = function(src, type, opt_fn,
+                                                       opt_capture,
+                                                       opt_handler) {
+  if (goog.isArray(type)) {
+    for (var i = 0; i < type.length; i++) {
+      this.unlisten(src, type[i], opt_fn, opt_capture, opt_handler);
+    }
+  } else {
+    var listener = goog.events.getListener(src, type, opt_fn || this,
+        opt_capture, opt_handler || this.handler_ || this);
+
+    if (listener) {
+      var key = listener.key;
+      goog.events.unlistenByKey(key);
+      goog.array.remove(this.keys_, key);
+    }
+  }
+
+  return this;
+};
+
+
+/**
+ * Removes an event listener which was added with listenWithWrapper().
+ *
+ * @param {EventTarget|goog.events.EventTarget} src The target to stop
+ *     listening to events on.
+ * @param {goog.events.EventWrapper} wrapper Event wrapper to use.
+ * @param {Function|Object} listener The listener function to remove.
+ * @param {boolean=} opt_capt In DOM-compliant browsers, this determines
+ *     whether the listener is fired during the capture or bubble phase of the
+ *     event.
+ * @param {Object=} opt_handler Element in whose scope to call the listener.
+ * @return {goog.events.EventHandler} This object, allowing for chaining of
+ *     calls.
+ */
+goog.events.EventHandler.prototype.unlistenWithWrapper = function(src, wrapper,
+    listener, opt_capt, opt_handler) {
+  wrapper.unlisten(src, listener, opt_capt,
+                   opt_handler || this.handler_ || this, this);
+  return this;
+};
+
+
+/**
+ * Unlistens to all events.
+ */
+goog.events.EventHandler.prototype.removeAll = function() {
+  goog.array.forEach(this.keys_, goog.events.unlistenByKey);
+  this.keys_.length = 0;
+};
+
+
+/**
+ * Disposes of this EventHandler and removes all listeners that it registered.
+ * @override
+ * @protected
+ */
+goog.events.EventHandler.prototype.disposeInternal = function() {
+  goog.events.EventHandler.superClass_.disposeInternal.call(this);
+  this.removeAll();
+};
+
+
+/**
+ * Default event handler
+ * @param {goog.events.Event} e Event object.
+ */
+goog.events.EventHandler.prototype.handleEvent = function(e) {
+  throw Error('EventHandler.handleEvent not implemented');
+};
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Generator for unique element IDs.
+ *
+ */
+
+goog.provide('goog.ui.IdGenerator');
+
+
+
+/**
+ * Creates a new id generator.
+ * @constructor
+ */
+goog.ui.IdGenerator = function() {
+};
+goog.addSingletonGetter(goog.ui.IdGenerator);
+
+
+/**
+ * Next unique ID to use
+ * @type {number}
+ * @private
+ */
+goog.ui.IdGenerator.prototype.nextId_ = 0;
+
+
+/**
+ * Gets the next unique ID.
+ * @return {string} The next unique identifier.
+ */
+goog.ui.IdGenerator.prototype.getNextUniqueId = function() {
+  return ':' + (this.nextId_++).toString(36);
+};
+
+
+/**
+ * Default instance for id generation. Done as an instance instead of statics
+ * so it's possible to inject a mock for unit testing purposes.
+ * @type {goog.ui.IdGenerator}
+ * @deprecated Use goog.ui.IdGenerator.getInstance() instead and do not refer
+ * to goog.ui.IdGenerator.instance anymore.
+ */
+goog.ui.IdGenerator.instance = goog.ui.IdGenerator.getInstance();
+// Copyright 2005 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
  * @fileoverview Implementation of EventTarget as defined by W3C DOM 2/3.
  *
  * @author arv@google.com (Erik Arvidsson) [Original implementation]
@@ -18812,6 +20484,1250 @@ goog.events.EventTarget.prototype.disposeInternal = function() {
   goog.events.EventTarget.superClass_.disposeInternal.call(this);
   goog.events.removeAll(this);
   this.parentEventTarget_ = null;
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Abstract class for all UI components. This defines the standard
+ * design pattern that all UI components should follow.
+ *
+ * @see ../demos/samplecomponent.html
+ * @see http://code.google.com/p/closure-library/wiki/IntroToComponents
+ */
+
+goog.provide('goog.ui.Component');
+goog.provide('goog.ui.Component.Error');
+goog.provide('goog.ui.Component.EventType');
+goog.provide('goog.ui.Component.State');
+
+goog.require('goog.array');
+goog.require('goog.array.ArrayLike');
+goog.require('goog.dom');
+goog.require('goog.events.EventHandler');
+goog.require('goog.events.EventTarget');
+goog.require('goog.object');
+goog.require('goog.style');
+goog.require('goog.ui.IdGenerator');
+
+
+
+/**
+ * Default implementation of UI component.
+ *
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper.
+ * @constructor
+ * @extends {goog.events.EventTarget}
+ */
+goog.ui.Component = function(opt_domHelper) {
+  goog.events.EventTarget.call(this);
+  this.dom_ = opt_domHelper || goog.dom.getDomHelper();
+
+  // Set the defalt right to left value.
+  this.rightToLeft_ = goog.ui.Component.defaultRightToLeft_;
+};
+goog.inherits(goog.ui.Component, goog.events.EventTarget);
+
+
+/**
+ * Generator for unique IDs.
+ * @type {goog.ui.IdGenerator}
+ * @private
+ */
+goog.ui.Component.prototype.idGenerator_ = goog.ui.IdGenerator.getInstance();
+
+
+/**
+ * The default right to left value.
+ * @type {?boolean}
+ * @private
+ */
+goog.ui.Component.defaultRightToLeft_ = null;
+
+
+/**
+ * Common events fired by components so that event propagation is useful.  Not
+ * all components are expected to dispatch or listen for all event types.
+ * Events dispatched before a state transition should be cancelable to prevent
+ * the corresponding state change.
+ * @enum {string}
+ */
+goog.ui.Component.EventType = {
+  /** Dispatched before the component becomes visible. */
+  BEFORE_SHOW: 'beforeshow',
+
+  /**
+   * Dispatched after the component becomes visible.
+   * NOTE(user): For goog.ui.Container, this actually fires before containers
+   * are shown.  Use goog.ui.Container.EventType.AFTER_SHOW if you want an event
+   * that fires after a goog.ui.Container is shown.
+   */
+  SHOW: 'show',
+
+  /** Dispatched before the component becomes hidden. */
+  HIDE: 'hide',
+
+  /** Dispatched before the component becomes disabled. */
+  DISABLE: 'disable',
+
+  /** Dispatched before the component becomes enabled. */
+  ENABLE: 'enable',
+
+  /** Dispatched before the component becomes highlighted. */
+  HIGHLIGHT: 'highlight',
+
+  /** Dispatched before the component becomes un-highlighted. */
+  UNHIGHLIGHT: 'unhighlight',
+
+  /** Dispatched before the component becomes activated. */
+  ACTIVATE: 'activate',
+
+  /** Dispatched before the component becomes deactivated. */
+  DEACTIVATE: 'deactivate',
+
+  /** Dispatched before the component becomes selected. */
+  SELECT: 'select',
+
+  /** Dispatched before the component becomes un-selected. */
+  UNSELECT: 'unselect',
+
+  /** Dispatched before a component becomes checked. */
+  CHECK: 'check',
+
+  /** Dispatched before a component becomes un-checked. */
+  UNCHECK: 'uncheck',
+
+  /** Dispatched before a component becomes focused. */
+  FOCUS: 'focus',
+
+  /** Dispatched before a component becomes blurred. */
+  BLUR: 'blur',
+
+  /** Dispatched before a component is opened (expanded). */
+  OPEN: 'open',
+
+  /** Dispatched before a component is closed (collapsed). */
+  CLOSE: 'close',
+
+  /** Dispatched after a component is moused over. */
+  ENTER: 'enter',
+
+  /** Dispatched after a component is moused out of. */
+  LEAVE: 'leave',
+
+  /** Dispatched after the user activates the component. */
+  ACTION: 'action',
+
+  /** Dispatched after the external-facing state of a component is changed. */
+  CHANGE: 'change'
+};
+
+
+/**
+ * Errors thrown by the component.
+ * @enum {string}
+ */
+goog.ui.Component.Error = {
+  /**
+   * Error when a method is not supported.
+   */
+  NOT_SUPPORTED: 'Method not supported',
+
+  /**
+   * Error when the given element can not be decorated.
+   */
+  DECORATE_INVALID: 'Invalid element to decorate',
+
+  /**
+   * Error when the component is already rendered and another render attempt is
+   * made.
+   */
+  ALREADY_RENDERED: 'Component already rendered',
+
+  /**
+   * Error when an attempt is made to set the parent of a component in a way
+   * that would result in an inconsistent object graph.
+   */
+  PARENT_UNABLE_TO_BE_SET: 'Unable to set parent component',
+
+  /**
+   * Error when an attempt is made to add a child component at an out-of-bounds
+   * index.  We don't support sparse child arrays.
+   */
+  CHILD_INDEX_OUT_OF_BOUNDS: 'Child component index out of bounds',
+
+  /**
+   * Error when an attempt is made to remove a child component from a component
+   * other than its parent.
+   */
+  NOT_OUR_CHILD: 'Child is not in parent component',
+
+  /**
+   * Error when an operation requiring DOM interaction is made when the
+   * component is not in the document
+   */
+  NOT_IN_DOCUMENT: 'Operation not supported while component is not in document',
+
+  /**
+   * Error when an invalid component state is encountered.
+   */
+  STATE_INVALID: 'Invalid component state'
+};
+
+
+/**
+ * Common component states.  Components may have distinct appearance depending
+ * on what state(s) apply to them.  Not all components are expected to support
+ * all states.
+ * @enum {number}
+ */
+goog.ui.Component.State = {
+  /**
+   * Union of all supported component states.
+   */
+  ALL: 0xFF,
+
+  /**
+   * Component is disabled.
+   * @see goog.ui.Component.EventType.DISABLE
+   * @see goog.ui.Component.EventType.ENABLE
+   */
+  DISABLED: 0x01,
+
+  /**
+   * Component is highlighted.
+   * @see goog.ui.Component.EventType.HIGHLIGHT
+   * @see goog.ui.Component.EventType.UNHIGHLIGHT
+   */
+  HOVER: 0x02,
+
+  /**
+   * Component is active (or "pressed").
+   * @see goog.ui.Component.EventType.ACTIVATE
+   * @see goog.ui.Component.EventType.DEACTIVATE
+   */
+  ACTIVE: 0x04,
+
+  /**
+   * Component is selected.
+   * @see goog.ui.Component.EventType.SELECT
+   * @see goog.ui.Component.EventType.UNSELECT
+   */
+  SELECTED: 0x08,
+
+  /**
+   * Component is checked.
+   * @see goog.ui.Component.EventType.CHECK
+   * @see goog.ui.Component.EventType.UNCHECK
+   */
+  CHECKED: 0x10,
+
+  /**
+   * Component has focus.
+   * @see goog.ui.Component.EventType.FOCUS
+   * @see goog.ui.Component.EventType.BLUR
+   */
+  FOCUSED: 0x20,
+
+  /**
+   * Component is opened (expanded).  Applies to tree nodes, menu buttons,
+   * submenus, zippys (zippies?), etc.
+   * @see goog.ui.Component.EventType.OPEN
+   * @see goog.ui.Component.EventType.CLOSE
+   */
+  OPENED: 0x40
+};
+
+
+/**
+ * Static helper method; returns the type of event components are expected to
+ * dispatch when transitioning to or from the given state.
+ * @param {goog.ui.Component.State} state State to/from which the component
+ *     is transitioning.
+ * @param {boolean} isEntering Whether the component is entering or leaving the
+ *     state.
+ * @return {goog.ui.Component.EventType} Event type to dispatch.
+ */
+goog.ui.Component.getStateTransitionEvent = function(state, isEntering) {
+  switch (state) {
+    case goog.ui.Component.State.DISABLED:
+      return isEntering ? goog.ui.Component.EventType.DISABLE :
+          goog.ui.Component.EventType.ENABLE;
+    case goog.ui.Component.State.HOVER:
+      return isEntering ? goog.ui.Component.EventType.HIGHLIGHT :
+          goog.ui.Component.EventType.UNHIGHLIGHT;
+    case goog.ui.Component.State.ACTIVE:
+      return isEntering ? goog.ui.Component.EventType.ACTIVATE :
+          goog.ui.Component.EventType.DEACTIVATE;
+    case goog.ui.Component.State.SELECTED:
+      return isEntering ? goog.ui.Component.EventType.SELECT :
+          goog.ui.Component.EventType.UNSELECT;
+    case goog.ui.Component.State.CHECKED:
+      return isEntering ? goog.ui.Component.EventType.CHECK :
+          goog.ui.Component.EventType.UNCHECK;
+    case goog.ui.Component.State.FOCUSED:
+      return isEntering ? goog.ui.Component.EventType.FOCUS :
+          goog.ui.Component.EventType.BLUR;
+    case goog.ui.Component.State.OPENED:
+      return isEntering ? goog.ui.Component.EventType.OPEN :
+          goog.ui.Component.EventType.CLOSE;
+    default:
+      // Fall through.
+  }
+
+  // Invalid state.
+  throw Error(goog.ui.Component.Error.STATE_INVALID);
+};
+
+
+/**
+ * Set the default right-to-left value. This causes all component's created from
+ * this point foward to have the given value. This is useful for cases where
+ * a given page is always in one directionality, avoiding unnecessary
+ * right to left determinations.
+ * @param {?boolean} rightToLeft Whether the components should be rendered
+ *     right-to-left. Null iff components should determine their directionality.
+ */
+goog.ui.Component.setDefaultRightToLeft = function(rightToLeft) {
+  goog.ui.Component.defaultRightToLeft_ = rightToLeft;
+};
+
+
+/**
+ * Unique ID of the component, lazily initialized in {@link
+ * goog.ui.Component#getId} if needed.  This property is strictly private and
+ * must not be accessed directly outside of this class!
+ * @type {?string}
+ * @private
+ */
+goog.ui.Component.prototype.id_ = null;
+
+
+/**
+ * DomHelper used to interact with the document, allowing components to be
+ * created in a different window.
+ * @type {!goog.dom.DomHelper}
+ * @protected
+ * @suppress {underscore}
+ */
+goog.ui.Component.prototype.dom_;
+
+
+/**
+ * Whether the component is in the document.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Component.prototype.inDocument_ = false;
+
+
+// TODO(attila): Stop referring to this private field in subclasses.
+/**
+ * The DOM element for the component.
+ * @type {Element}
+ * @private
+ */
+goog.ui.Component.prototype.element_ = null;
+
+
+/**
+ * Event handler.
+ * TODO(user): rename it to handler_ after all component subclasses in
+ * inside Google have been cleaned up.
+ * Code search: http://go/component_code_search
+ * @type {goog.events.EventHandler}
+ * @private
+ */
+goog.ui.Component.prototype.googUiComponentHandler_;
+
+
+/**
+ * Whether the component is rendered right-to-left.  Right-to-left is set
+ * lazily when {@link #isRightToLeft} is called the first time, unless it has
+ * been set by calling {@link #setRightToLeft} explicitly.
+ * @type {?boolean}
+ * @private
+ */
+goog.ui.Component.prototype.rightToLeft_ = null;
+
+
+/**
+ * Arbitrary data object associated with the component.  Such as meta-data.
+ * @type {*}
+ * @private
+ */
+goog.ui.Component.prototype.model_ = null;
+
+
+/**
+ * Parent component to which events will be propagated.  This property is
+ * strictly private and must not be accessed directly outside of this class!
+ * @type {goog.ui.Component?}
+ * @private
+ */
+goog.ui.Component.prototype.parent_ = null;
+
+
+/**
+ * Array of child components.  Lazily initialized on first use.  Must be kept in
+ * sync with {@code childIndex_}.  This property is strictly private and must
+ * not be accessed directly outside of this class!
+ * @type {Array.<goog.ui.Component>?}
+ * @private
+ */
+goog.ui.Component.prototype.children_ = null;
+
+
+/**
+ * Map of child component IDs to child components.  Used for constant-time
+ * random access to child components by ID.  Lazily initialized on first use.
+ * Must be kept in sync with {@code children_}.  This property is strictly
+ * private and must not be accessed directly outside of this class!
+ *
+ * We use a plain Object, not a {@link goog.structs.Map}, for simplicity.
+ * This means components can't have children with IDs such as 'constructor' or
+ * 'valueOf', but this shouldn't really be an issue in practice, and if it is,
+ * we can always fix it later without changing the API.
+ *
+ * @type {Object}
+ * @private
+ */
+goog.ui.Component.prototype.childIndex_ = null;
+
+
+/**
+ * Flag used to keep track of whether a component decorated an already existing
+ * element or whether it created the DOM itself.
+ *
+ * If an element is decorated, dispose will leave the node in the document.
+ * It is up to the app to remove the node.
+ *
+ * If an element was rendered, dispose will remove the node automatically.
+ *
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Component.prototype.wasDecorated_ = false;
+
+
+/**
+ * Gets the unique ID for the instance of this component.  If the instance
+ * doesn't already have an ID, generates one on the fly.
+ * @return {string} Unique component ID.
+ */
+goog.ui.Component.prototype.getId = function() {
+  return this.id_ || (this.id_ = this.idGenerator_.getNextUniqueId());
+};
+
+
+/**
+ * Assigns an ID to this component instance.  It is the caller's responsibility
+ * to guarantee that the ID is unique.  If the component is a child of a parent
+ * component, then the parent component's child index is updated to reflect the
+ * new ID; this may throw an error if the parent already has a child with an ID
+ * that conflicts with the new ID.
+ * @param {string} id Unique component ID.
+ */
+goog.ui.Component.prototype.setId = function(id) {
+  if (this.parent_ && this.parent_.childIndex_) {
+    // Update the parent's child index.
+    goog.object.remove(this.parent_.childIndex_, this.id_);
+    goog.object.add(this.parent_.childIndex_, id, this);
+  }
+
+  // Update the component ID.
+  this.id_ = id;
+};
+
+
+/**
+ * Gets the component's element.
+ * @return {Element} The element for the component.
+ */
+goog.ui.Component.prototype.getElement = function() {
+  return this.element_;
+};
+
+
+/**
+ * Sets the component's root element to the given element.  Considered
+ * protected and final.
+ *
+ * This should generally only be called during createDom. Setting the element
+ * does not actually change which element is rendered, only the element that is
+ * associated with this UI component.
+ *
+ * @param {Element} element Root element for the component.
+ * @protected
+ */
+goog.ui.Component.prototype.setElementInternal = function(element) {
+  this.element_ = element;
+};
+
+
+/**
+ * Returns an array of all the elements in this component's DOM with the
+ * provided className.
+ * @param {string} className The name of the class to look for.
+ * @return {!goog.array.ArrayLike} The items found with the class name provided.
+ */
+goog.ui.Component.prototype.getElementsByClass = function(className) {
+  return this.element_ ?
+      this.dom_.getElementsByClass(className, this.element_) : [];
+};
+
+
+/**
+ * Returns the first element in this component's DOM with the provided
+ * className.
+ * @param {string} className The name of the class to look for.
+ * @return {Element} The first item with the class name provided.
+ */
+goog.ui.Component.prototype.getElementByClass = function(className) {
+  return this.element_ ?
+      this.dom_.getElementByClass(className, this.element_) : null;
+};
+
+
+/**
+ * Returns the event handler for this component, lazily created the first time
+ * this method is called.
+ * @return {!goog.events.EventHandler} Event handler for this component.
+ * @protected
+ */
+goog.ui.Component.prototype.getHandler = function() {
+  return this.googUiComponentHandler_ ||
+         (this.googUiComponentHandler_ = new goog.events.EventHandler(this));
+};
+
+
+/**
+ * Sets the parent of this component to use for event bubbling.  Throws an error
+ * if the component already has a parent or if an attempt is made to add a
+ * component to itself as a child.  Callers must use {@code removeChild}
+ * or {@code removeChildAt} to remove components from their containers before
+ * calling this method.
+ * @see goog.ui.Component#removeChild
+ * @see goog.ui.Component#removeChildAt
+ * @param {goog.ui.Component} parent The parent component.
+ */
+goog.ui.Component.prototype.setParent = function(parent) {
+  if (this == parent) {
+    // Attempting to add a child to itself is an error.
+    throw Error(goog.ui.Component.Error.PARENT_UNABLE_TO_BE_SET);
+  }
+
+  if (parent && this.parent_ && this.id_ && this.parent_.getChild(this.id_) &&
+      this.parent_ != parent) {
+    // This component is already the child of some parent, so it should be
+    // removed using removeChild/removeChildAt first.
+    throw Error(goog.ui.Component.Error.PARENT_UNABLE_TO_BE_SET);
+  }
+
+  this.parent_ = parent;
+  goog.ui.Component.superClass_.setParentEventTarget.call(this, parent);
+};
+
+
+/**
+ * Returns the component's parent, if any.
+ * @return {goog.ui.Component?} The parent component.
+ */
+goog.ui.Component.prototype.getParent = function() {
+  return this.parent_;
+};
+
+
+/**
+ * Overrides {@link goog.events.EventTarget#setParentEventTarget} to throw an
+ * error if the parent component is set, and the argument is not the parent.
+ * @override
+ */
+goog.ui.Component.prototype.setParentEventTarget = function(parent) {
+  if (this.parent_ && this.parent_ != parent) {
+    throw Error(goog.ui.Component.Error.NOT_SUPPORTED);
+  }
+  goog.ui.Component.superClass_.setParentEventTarget.call(this, parent);
+};
+
+
+/**
+ * Returns the dom helper that is being used on this component.
+ * @return {!goog.dom.DomHelper} The dom helper used on this component.
+ */
+goog.ui.Component.prototype.getDomHelper = function() {
+  return this.dom_;
+};
+
+
+/**
+ * Determines whether the component has been added to the document.
+ * @return {boolean} TRUE if rendered. Otherwise, FALSE.
+ */
+goog.ui.Component.prototype.isInDocument = function() {
+  return this.inDocument_;
+};
+
+
+/**
+ * Creates the initial DOM representation for the component.  The default
+ * implementation is to set this.element_ = div.
+ */
+goog.ui.Component.prototype.createDom = function() {
+  this.element_ = this.dom_.createElement('div');
+};
+
+
+/**
+ * Renders the component.  If a parent element is supplied, the component's
+ * element will be appended to it.  If there is no optional parent element and
+ * the element doesn't have a parentNode then it will be appended to the
+ * document body.
+ *
+ * If this component has a parent component, and the parent component is
+ * not in the document already, then this will not call {@code enterDocument}
+ * on this component.
+ *
+ * Throws an Error if the component is already rendered.
+ *
+ * @param {Element=} opt_parentElement Optional parent element to render the
+ *    component into.
+ */
+goog.ui.Component.prototype.render = function(opt_parentElement) {
+  this.render_(opt_parentElement);
+};
+
+
+/**
+ * Renders the component before another element. The other element should be in
+ * the document already.
+ *
+ * Throws an Error if the component is already rendered.
+ *
+ * @param {Node} sibling Node to render the component before.
+ */
+goog.ui.Component.prototype.renderBefore = function(sibling) {
+  this.render_(/** @type {Element} */ (sibling.parentNode),
+               sibling);
+};
+
+
+/**
+ * Renders the component.  If a parent element is supplied, the component's
+ * element will be appended to it.  If there is no optional parent element and
+ * the element doesn't have a parentNode then it will be appended to the
+ * document body.
+ *
+ * If this component has a parent component, and the parent component is
+ * not in the document already, then this will not call {@code enterDocument}
+ * on this component.
+ *
+ * Throws an Error if the component is already rendered.
+ *
+ * @param {Element=} opt_parentElement Optional parent element to render the
+ *    component into.
+ * @param {Node=} opt_beforeNode Node before which the component is to
+ *    be rendered.  If left out the node is appended to the parent element.
+ * @private
+ */
+goog.ui.Component.prototype.render_ = function(opt_parentElement,
+                                               opt_beforeNode) {
+  if (this.inDocument_) {
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+
+  if (!this.element_) {
+    this.createDom();
+  }
+
+  if (opt_parentElement) {
+    opt_parentElement.insertBefore(this.element_, opt_beforeNode || null);
+  } else {
+    this.dom_.getDocument().body.appendChild(this.element_);
+  }
+
+  // If this component has a parent component that isn't in the document yet,
+  // we don't call enterDocument() here.  Instead, when the parent component
+  // enters the document, the enterDocument() call will propagate to its
+  // children, including this one.  If the component doesn't have a parent
+  // or if the parent is already in the document, we call enterDocument().
+  if (!this.parent_ || this.parent_.isInDocument()) {
+    this.enterDocument();
+  }
+};
+
+
+/**
+ * Decorates the element for the UI component.
+ * @param {Element} element Element to decorate.
+ */
+goog.ui.Component.prototype.decorate = function(element) {
+  if (this.inDocument_) {
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  } else if (element && this.canDecorate(element)) {
+    this.wasDecorated_ = true;
+
+    // Set the DOM helper of the component to match the decorated element.
+    if (!this.dom_ ||
+        this.dom_.getDocument() != goog.dom.getOwnerDocument(element)) {
+      this.dom_ = goog.dom.getDomHelper(element);
+    }
+
+    // Call specific component decorate logic.
+    this.decorateInternal(element);
+    this.enterDocument();
+  } else {
+    throw Error(goog.ui.Component.Error.DECORATE_INVALID);
+  }
+};
+
+
+/**
+ * Determines if a given element can be decorated by this type of component.
+ * This method should be overridden by inheriting objects.
+ * @param {Element} element Element to decorate.
+ * @return {boolean} True if the element can be decorated, false otherwise.
+ */
+goog.ui.Component.prototype.canDecorate = function(element) {
+  return true;
+};
+
+
+/**
+ * @return {boolean} Whether the component was decorated.
+ */
+goog.ui.Component.prototype.wasDecorated = function() {
+  return this.wasDecorated_;
+};
+
+
+/**
+ * Actually decorates the element. Should be overridden by inheriting objects.
+ * This method can assume there are checks to ensure the component has not
+ * already been rendered have occurred and that enter document will be called
+ * afterwards. This method is considered protected.
+ * @param {Element} element Element to decorate.
+ * @protected
+ */
+goog.ui.Component.prototype.decorateInternal = function(element) {
+  this.element_ = element;
+};
+
+
+/**
+ * Called when the component's element is known to be in the document. Anything
+ * using document.getElementById etc. should be done at this stage.
+ *
+ * If the component contains child components, this call is propagated to its
+ * children.
+ */
+goog.ui.Component.prototype.enterDocument = function() {
+  this.inDocument_ = true;
+
+  // Propagate enterDocument to child components that have a DOM, if any.
+  this.forEachChild(function(child) {
+    if (!child.isInDocument() && child.getElement()) {
+      child.enterDocument();
+    }
+  });
+};
+
+
+/**
+ * Called by dispose to clean up the elements and listeners created by a
+ * component, or by a parent component/application who has removed the
+ * component from the document but wants to reuse it later.
+ *
+ * If the component contains child components, this call is propagated to its
+ * children.
+ *
+ * It should be possible for the component to be rendered again once this method
+ * has been called.
+ */
+goog.ui.Component.prototype.exitDocument = function() {
+  // Propagate exitDocument to child components that have been rendered, if any.
+  this.forEachChild(function(child) {
+    if (child.isInDocument()) {
+      child.exitDocument();
+    }
+  });
+
+  if (this.googUiComponentHandler_) {
+    this.googUiComponentHandler_.removeAll();
+  }
+
+  this.inDocument_ = false;
+};
+
+
+/**
+ * Disposes of the component.  Calls {@code exitDocument}, which is expected to
+ * remove event handlers and clean up the component.  Propagates the call to
+ * the component's children, if any. Removes the component's DOM from the
+ * document unless it was decorated.
+ * @override
+ * @protected
+ */
+goog.ui.Component.prototype.disposeInternal = function() {
+  goog.ui.Component.superClass_.disposeInternal.call(this);
+
+  if (this.inDocument_) {
+    this.exitDocument();
+  }
+
+  if (this.googUiComponentHandler_) {
+    this.googUiComponentHandler_.dispose();
+    delete this.googUiComponentHandler_;
+  }
+
+  // Disposes of the component's children, if any.
+  this.forEachChild(function(child) {
+    child.dispose();
+  });
+
+  // Detach the component's element from the DOM, unless it was decorated.
+  if (!this.wasDecorated_ && this.element_) {
+    goog.dom.removeNode(this.element_);
+  }
+
+  this.children_ = null;
+  this.childIndex_ = null;
+  this.element_ = null;
+  this.model_ = null;
+  this.parent_ = null;
+  // TODO(gboyer): delete this.dom_ breaks many unit tests.
+};
+
+
+/**
+ * Helper function for subclasses that gets a unique id for a given fragment,
+ * this can be used by components to generate unique string ids for DOM
+ * elements.
+ * @param {string} idFragment A partial id.
+ * @return {string} Unique element id.
+ */
+goog.ui.Component.prototype.makeId = function(idFragment) {
+  return this.getId() + '.' + idFragment;
+};
+
+
+/**
+ * Makes a collection of ids.  This is a convenience method for makeId.  The
+ * object's values are the id fragments and the new values are the generated
+ * ids.  The key will remain the same.
+ * @param {Object} object The object that will be used to create the ids.
+ * @return {Object} An object of id keys to generated ids.
+ */
+goog.ui.Component.prototype.makeIds = function(object) {
+  var ids = {};
+  for (var key in object) {
+    ids[key] = this.makeId(object[key]);
+  }
+  return ids;
+};
+
+
+/**
+ * Returns the model associated with the UI component.
+ * @return {*} The model.
+ */
+goog.ui.Component.prototype.getModel = function() {
+  return this.model_;
+};
+
+
+/**
+ * Sets the model associated with the UI component.
+ * @param {*} obj The model.
+ */
+goog.ui.Component.prototype.setModel = function(obj) {
+  this.model_ = obj;
+};
+
+
+/**
+ * Helper function for returning the fragment portion of an id generated using
+ * makeId().
+ * @param {string} id Id generated with makeId().
+ * @return {string} Fragment.
+ */
+goog.ui.Component.prototype.getFragmentFromId = function(id) {
+  return id.substring(this.getId().length + 1);
+};
+
+
+/**
+ * Helper function for returning an element in the document with a unique id
+ * generated using makeId().
+ * @param {string} idFragment The partial id.
+ * @return {Element} The element with the unique id, or null if it cannot be
+ *     found.
+ */
+goog.ui.Component.prototype.getElementByFragment = function(idFragment) {
+  if (!this.inDocument_) {
+    throw Error(goog.ui.Component.Error.NOT_IN_DOCUMENT);
+  }
+  return this.dom_.getElement(this.makeId(idFragment));
+};
+
+
+/**
+ * Adds the specified component as the last child of this component.  See
+ * {@link goog.ui.Component#addChildAt} for detailed semantics.
+ *
+ * @see goog.ui.Component#addChildAt
+ * @param {goog.ui.Component} child The new child component.
+ * @param {boolean=} opt_render If true, the child component will be rendered
+ *    into the parent.
+ */
+goog.ui.Component.prototype.addChild = function(child, opt_render) {
+  // TODO(gboyer): addChildAt(child, this.getChildCount(), false) will
+  // reposition any already-rendered child to the end.  Instead, perhaps
+  // addChild(child, false) should never reposition the child; instead, clients
+  // that need the repositioning will use addChildAt explicitly.  Right now,
+  // clients can get around this by calling addChild first.
+  this.addChildAt(child, this.getChildCount(), opt_render);
+};
+
+
+/**
+ * Adds the specified component as a child of this component at the given
+ * 0-based index.
+ *
+ * Both {@code addChild} and {@code addChildAt} assume the following contract
+ * between parent and child components:
+ *  <ul>
+ *    <li>the child component's element must be a descendant of the parent
+ *        component's element, and
+ *    <li>the DOM state of the child component must be consistent with the DOM
+ *        state of the parent component (see {@code isInDocument}) in the
+ *        steady state -- the exception is to addChildAt(child, i, false) and
+ *        then immediately decorate/render the child.
+ *  </ul>
+ *
+ * In particular, {@code parent.addChild(child)} will throw an error if the
+ * child component is already in the document, but the parent isn't.
+ *
+ * Clients of this API may call {@code addChild} and {@code addChildAt} with
+ * {@code opt_render} set to true.  If {@code opt_render} is true, calling these
+ * methods will automatically render the child component's element into the
+ * parent component's element.  However, {@code parent.addChild(child, true)}
+ * will throw an error if:
+ *  <ul>
+ *    <li>the parent component has no DOM (i.e. {@code parent.getElement()} is
+ *        null), or
+ *    <li>the child component is already in the document, regardless of the
+ *        parent's DOM state.
+ *  </ul>
+ *
+ * If {@code opt_render} is true and the parent component is not already
+ * in the document, {@code enterDocument} will not be called on this component
+ * at this point.
+ *
+ * Finally, this method also throws an error if the new child already has a
+ * different parent, or the given index is out of bounds.
+ *
+ * @see goog.ui.Component#addChild
+ * @param {goog.ui.Component} child The new child component.
+ * @param {number} index 0-based index at which the new child component is to be
+ *    added; must be between 0 and the current child count (inclusive).
+ * @param {boolean=} opt_render If true, the child component will be rendered
+ *    into the parent.
+ * @return {void} Nada.
+ */
+goog.ui.Component.prototype.addChildAt = function(child, index, opt_render) {
+  if (child.inDocument_ && (opt_render || !this.inDocument_)) {
+    // Adding a child that's already in the document is an error, except if the
+    // parent is also in the document and opt_render is false (e.g. decorate()).
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+
+  if (index < 0 || index > this.getChildCount()) {
+    // Allowing sparse child arrays would lead to strange behavior, so we don't.
+    throw Error(goog.ui.Component.Error.CHILD_INDEX_OUT_OF_BOUNDS);
+  }
+
+  // Create the index and the child array on first use.
+  if (!this.childIndex_ || !this.children_) {
+    this.childIndex_ = {};
+    this.children_ = [];
+  }
+
+  // Moving child within component, remove old reference.
+  if (child.getParent() == this) {
+    goog.object.set(this.childIndex_, child.getId(), child);
+    goog.array.remove(this.children_, child);
+
+  // Add the child to this component.  goog.object.add() throws an error if
+  // a child with the same ID already exists.
+  } else {
+    goog.object.add(this.childIndex_, child.getId(), child);
+  }
+
+  // Set the parent of the child to this component.  This throws an error if
+  // the child is already contained by another component.
+  child.setParent(this);
+  goog.array.insertAt(this.children_, child, index);
+
+  if (child.inDocument_ && this.inDocument_ && child.getParent() == this) {
+    // Changing the position of an existing child, move the DOM node.
+    var contentElement = this.getContentElement();
+    contentElement.insertBefore(child.getElement(),
+        (contentElement.childNodes[index] || null));
+
+  } else if (opt_render) {
+    // If this (parent) component doesn't have a DOM yet, call createDom now
+    // to make sure we render the child component's element into the correct
+    // parent element (otherwise render_ with a null first argument would
+    // render the child into the document body, which is almost certainly not
+    // what we want).
+    if (!this.element_) {
+      this.createDom();
+    }
+    // Render the child into the parent at the appropriate location.  Note that
+    // getChildAt(index + 1) returns undefined if inserting at the end.
+    // TODO(attila): We should have a renderer with a renderChildAt API.
+    var sibling = this.getChildAt(index + 1);
+    // render_() calls enterDocument() if the parent is already in the document.
+    child.render_(this.getContentElement(), sibling ? sibling.element_ : null);
+  } else if (this.inDocument_ && !child.inDocument_ && child.element_ &&
+      child.element_.parentNode) {
+    // We don't touch the DOM, but if the parent is in the document, and the
+    // child element is in the document but not marked as such, then we call
+    // enterDocument on the child.
+    // TODO(gboyer): It would be nice to move this condition entirely, but
+    // there's a large risk of breaking existing applications that manually
+    // append the child to the DOM and then call addChild.
+    child.enterDocument();
+  }
+};
+
+
+/**
+ * Returns the DOM element into which child components are to be rendered,
+ * or null if the component itself hasn't been rendered yet.  This default
+ * implementation returns the component's root element.  Subclasses with
+ * complex DOM structures must override this method.
+ * @return {Element} Element to contain child elements (null if none).
+ */
+goog.ui.Component.prototype.getContentElement = function() {
+  return this.element_;
+};
+
+
+/**
+ * Returns true if the component is rendered right-to-left, false otherwise.
+ * The first time this function is invoked, the right-to-left rendering property
+ * is set if it has not been already.
+ * @return {boolean} Whether the control is rendered right-to-left.
+ */
+goog.ui.Component.prototype.isRightToLeft = function() {
+  if (this.rightToLeft_ == null) {
+    this.rightToLeft_ = goog.style.isRightToLeft(this.inDocument_ ?
+        this.element_ : this.dom_.getDocument().body);
+  }
+  return /** @type {boolean} */(this.rightToLeft_);
+};
+
+
+/**
+ * Set is right-to-left. This function should be used if the component needs
+ * to know the rendering direction during dom creation (i.e. before
+ * {@link #enterDocument} is called and is right-to-left is set).
+ * @param {boolean} rightToLeft Whether the component is rendered
+ *     right-to-left.
+ */
+goog.ui.Component.prototype.setRightToLeft = function(rightToLeft) {
+  if (this.inDocument_) {
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+  this.rightToLeft_ = rightToLeft;
+};
+
+
+/**
+ * Returns true if the component has children.
+ * @return {boolean} True if the component has children.
+ */
+goog.ui.Component.prototype.hasChildren = function() {
+  return !!this.children_ && this.children_.length != 0;
+};
+
+
+/**
+ * Returns the number of children of this component.
+ * @return {number} The number of children.
+ */
+goog.ui.Component.prototype.getChildCount = function() {
+  return this.children_ ? this.children_.length : 0;
+};
+
+
+/**
+ * Returns an array containing the IDs of the children of this component, or an
+ * empty array if the component has no children.
+ * @return {Array.<string>} Child component IDs.
+ */
+goog.ui.Component.prototype.getChildIds = function() {
+  var ids = [];
+
+  // We don't use goog.object.getKeys(this.childIndex_) because we want to
+  // return the IDs in the correct order as determined by this.children_.
+  this.forEachChild(function(child) {
+    // addChild()/addChildAt() guarantee that the child array isn't sparse.
+    ids.push(child.getId());
+  });
+
+  return ids;
+};
+
+
+/**
+ * Returns the child with the given ID, or null if no such child exists.
+ * @param {string} id Child component ID.
+ * @return {goog.ui.Component?} The child with the given ID; null if none.
+ */
+goog.ui.Component.prototype.getChild = function(id) {
+  // Use childIndex_ for O(1) access by ID.
+  return (this.childIndex_ && id) ? (/** @type {goog.ui.Component} */
+      goog.object.get(this.childIndex_, id)) || null : null;
+};
+
+
+/**
+ * Returns the child at the given index, or null if the index is out of bounds.
+ * @param {number} index 0-based index.
+ * @return {goog.ui.Component?} The child at the given index; null if none.
+ */
+goog.ui.Component.prototype.getChildAt = function(index) {
+  // Use children_ for access by index.
+  return this.children_ ? this.children_[index] || null : null;
+};
+
+
+/**
+ * Calls the given function on each of this component's children in order.  If
+ * {@code opt_obj} is provided, it will be used as the 'this' object in the
+ * function when called.  The function should take two arguments:  the child
+ * component and its 0-based index.  The return value is ignored.
+ * @param {Function} f The function to call for every child component; should
+ *    take 2 arguments (the child and its index).
+ * @param {Object=} opt_obj Used as the 'this' object in f when called.
+ */
+goog.ui.Component.prototype.forEachChild = function(f, opt_obj) {
+  if (this.children_) {
+    goog.array.forEach(this.children_, f, opt_obj);
+  }
+};
+
+
+/**
+ * Returns the 0-based index of the given child component, or -1 if no such
+ * child is found.
+ * @param {goog.ui.Component?} child The child component.
+ * @return {number} 0-based index of the child component; -1 if not found.
+ */
+goog.ui.Component.prototype.indexOfChild = function(child) {
+  return (this.children_ && child) ? goog.array.indexOf(this.children_, child) :
+      -1;
+};
+
+
+/**
+ * Removes the given child from this component, and returns it.  Throws an error
+ * if the argument is invalid or if the specified child isn't found in the
+ * parent component.  The argument can either be a string (interpreted as the
+ * ID of the child component to remove) or the child component itself.
+ *
+ * If {@code opt_unrender} is true, calls {@link goog.ui.component#exitDocument}
+ * on the removed child, and subsequently detaches the child's DOM from the
+ * document.  Otherwise it is the caller's responsibility to clean up the child
+ * component's DOM.
+ *
+ * @see goog.ui.Component#removeChildAt
+ * @param {string|goog.ui.Component|null} child The ID of the child to remove,
+ *    or the child component itself.
+ * @param {boolean=} opt_unrender If true, calls {@code exitDocument} on the
+ *    removed child component, and detaches its DOM from the document.
+ * @return {goog.ui.Component} The removed component, if any.
+ */
+goog.ui.Component.prototype.removeChild = function(child, opt_unrender) {
+  if (child) {
+    // Normalize child to be the object and id to be the ID string.  This also
+    // ensures that the child is really ours.
+    var id = goog.isString(child) ? child : child.getId();
+    child = this.getChild(id);
+
+    if (id && child) {
+      goog.object.remove(this.childIndex_, id);
+      goog.array.remove(this.children_, child);
+
+      if (opt_unrender) {
+        // Remove the child component's DOM from the document.  We have to call
+        // exitDocument first (see documentation).
+        child.exitDocument();
+        if (child.element_) {
+          goog.dom.removeNode(child.element_);
+        }
+      }
+
+      // Child's parent must be set to null after exitDocument is called
+      // so that the child can unlisten to its parent if required.
+      child.setParent(null);
+    }
+  }
+
+  if (!child) {
+    throw Error(goog.ui.Component.Error.NOT_OUR_CHILD);
+  }
+
+  return /** @type {goog.ui.Component} */(child);
+};
+
+
+/**
+ * Removes the child at the given index from this component, and returns it.
+ * Throws an error if the argument is out of bounds, or if the specified child
+ * isn't found in the parent.  See {@link goog.ui.Component#removeChild} for
+ * detailed semantics.
+ *
+ * @see goog.ui.Component#removeChild
+ * @param {number} index 0-based index of the child to remove.
+ * @param {boolean=} opt_unrender If true, calls {@code exitDocument} on the
+ *    removed child component, and detaches its DOM from the document.
+ * @return {goog.ui.Component} The removed component, if any.
+ */
+goog.ui.Component.prototype.removeChildAt = function(index, opt_unrender) {
+  // removeChild(null) will throw error.
+  return this.removeChild(this.getChildAt(index), opt_unrender);
+};
+
+
+/**
+ * Removes every child component attached to this one and returns them.
+ *
+ * @see goog.ui.Component#removeChild
+ * @param {boolean=} opt_unrender If true, calls {@link #exitDocument} on the
+ *    removed child components, and detaches their DOM from the document.
+ * @return {!Array.<goog.ui.Component>|undefined} The removed components if any.
+ */
+goog.ui.Component.prototype.removeChildren = function(opt_unrender) {
+  var removedChildren = [];
+  while (this.hasChildren()) {
+    removedChildren.push(this.removeChildAt(0, opt_unrender));
+  }
+  return removedChildren;
 };
 // Copyright 2006 The Closure Library Authors. All Rights Reserved.
 //
@@ -19111,6 +22027,8854 @@ goog.Timer.clear = function(timerId) {
 // limitations under the License.
 
 /**
+ * @fileoverview Utilities for adding, removing and setting ARIA roles
+ * as defined by W3C ARIA Working Draft:
+ *     http://www.w3.org/TR/2010/WD-wai-aria-20100916/
+ * All modern browsers have some form of ARIA support, so no browser checks are
+ * performed when adding ARIA to components.
+ *
+ */
+goog.provide('goog.dom.a11y');
+goog.provide('goog.dom.a11y.Announcer');
+goog.provide('goog.dom.a11y.LivePriority');
+goog.provide('goog.dom.a11y.Role');
+goog.provide('goog.dom.a11y.State');
+
+goog.require('goog.Disposable');
+goog.require('goog.dom');
+goog.require('goog.object');
+
+
+/**
+ * Enumeration of ARIA states and properties.
+ * @enum {string}
+ */
+goog.dom.a11y.State = {
+  // ARIA property for setting the currently active descendant of an element,
+  // for example the selected item in a list box. Value: ID of an element.
+  ACTIVEDESCENDANT: 'activedescendant',
+
+  // ARIA property that, if true, indicates that all of a changed region should
+  // be presented, instead of only parts. Value: one of {true, false}.
+  ATOMIC: 'atomic',
+
+  // ARIA property to specify that input completion is provided. Value:
+  // one of {'inline', 'list', 'both', 'none'}.
+  AUTOCOMPLETE: 'autocomplete',
+
+  // ARIA state to indicate that an element and its subtree are being updated.
+  // Value: one of {true, false}.
+  BUSY: 'busy',
+
+  // ARIA state for a checked item. Value: one of {'true', 'false', 'mixed',
+  // undefined}.
+  CHECKED: 'checked',
+
+  // ARIA property that identifies the element or elements whose contents or
+  // presence are controlled by this element. Value: space-separated IDs of
+  // other elements.
+  CONTROLS: 'controls',
+
+  // ARIA property that identifies the element or elements that describe
+  // this element. Value: space-separated IDs of other elements.
+  DESCRIBEDBY: 'describedby',
+
+  // ARIA state for a disabled item. Value: one of {true, false}.
+  DISABLED: 'disabled',
+
+  // ARIA property that indicates what functions can be performed when a
+  // dragged object is released on the drop target.  Value: one of
+  // {'copy', 'move', 'link', 'execute', 'popup', 'none'}.
+  DROPEFFECT: 'dropeffect',
+
+  // ARIA state for setting whether the element like a tree node is expanded.
+  // Value: one of {true, false, undefined}.
+  EXPANDED: 'expanded',
+
+  // ARIA property that identifies the next element (or elements) in the
+  // recommended reading order of content. Value: space-separated ids of
+  // elements to flow to.
+  FLOWTO: 'flowto',
+
+  // ARIA state that indicates an element's "grabbed" state in drag-and-drop.
+  // Value: one of {true, false, undefined}.
+  GRABBED: 'grabbed',
+
+  // ARIA property indicating whether the element has a popup. Value: one of
+  // {true, false}.
+  HASPOPUP: 'haspopup',
+
+  // ARIA state indicating that the element is not visible or perceivable
+  // to any user. Value: one of {true, false}.
+  HIDDEN: 'hidden',
+
+  // ARIA state indicating that the entered value does not conform. Value:
+  // one of {false, true, 'grammar', 'spelling'}
+  INVALID: 'invalid',
+
+  // ARIA property that provides a label to override any other text, value, or
+  // contents used to describe this element. Value: string.
+  LABEL: 'label',
+
+  // ARIA property for setting the element which labels another element.
+  // Value: space-separated IDs of elements.
+  LABELLEDBY: 'labelledby',
+
+  // ARIA property for setting the level of an element in the hierarchy.
+  // Value: integer.
+  LEVEL: 'level',
+
+  // ARIA property indicating that an element will be updated, and
+  // describes the types of updates the user agents, assistive technologies,
+  // and user can expect from the live region. Value: one of {'off', 'polite',
+  // 'assertive'}.
+  LIVE: 'live',
+
+  // ARIA property indicating whether a text box can accept multiline input.
+  // Value: one of {true, false}.
+  MULTILINE: 'multiline',
+
+  // ARIA property indicating if the user may select more than one item.
+  // Value: one of {true, false}.
+  MULTISELECTABLE: 'multiselectable',
+
+  // ARIA property indicating if the element is horizontal or vertical.
+  // Value: one of {'vertical', 'horizontal'}.
+  ORIENTATION: 'orientation',
+
+  // ARIA property creating a visual, functional, or contextual parent/child
+  // relationship when the DOM hierarchy can't be used to represent it.
+  // Value: Space-separated IDs of elements.
+  OWNS: 'owns',
+
+  // ARIA property that defines an element's number of position in a list.
+  // Value: integer.
+  POSINSET: 'posinset',
+
+  // ARIA state for a pressed item. Value: one of {true, false, undefined,
+  // 'mixed'}.
+  PRESSED: 'pressed',
+
+  // ARIA property indicating that an element is not editable.  Value:
+  // one of {true, false}.
+  READONLY: 'readonly',
+
+  // ARIA property indicating that change notifications within this subtree
+  // of a live region should be announced. Value: one of {'additions',
+  // 'removals', 'text', 'all', 'additions text'}.
+  RELEVANT: 'relevant',
+
+  // ARIA property indicating that user input is required on this element
+  // before a form may be submitted. Value: one of {true, false}.
+  REQUIRED: 'required',
+
+  // ARIA state for setting the currently selected item in the list.
+  // Value: one of {true, false, undefined}.
+  SELECTED: 'selected',
+
+  // ARIA property defining the number of items in a list. Value: integer.
+  SETSIZE: 'setsize',
+
+  // ARIA property indicating if items are sorted. Value: one of {'ascending',
+  // 'descending', 'none', 'other'}.
+  SORT: 'sort',
+
+  // ARIA property for slider maximum value. Value: number.
+  VALUEMAX: 'valuemax',
+
+  // ARIA property for slider minimum value. Value: number.
+  VALUEMIN: 'valuemin',
+
+  // ARIA property for slider active value. Value: number.
+  VALUENOW: 'valuenow',
+
+  // ARIA property for slider active value represented as text. Value: string.
+  VALUETEXT: 'valuetext'
+};
+
+
+/**
+ * Enumeration of ARIA roles.
+ * @enum {string}
+ */
+goog.dom.a11y.Role = {
+  // ARIA role for an alert element that doesn't need to be explicitly closed.
+  ALERT: 'alert',
+
+  // ARIA role for an alert dialog element that takes focus and must be closed.
+  ALERTDIALOG: 'alertdialog',
+
+  // ARIA role for an application that implements its own keyboard navigation.
+  APPLICATION: 'application',
+
+  // ARIA role for an article.
+  ARTICLE: 'article',
+
+  // ARIA role for a banner containing mostly site content, not page content.
+  BANNER: 'banner',
+
+  // ARIA role for a button element.
+  BUTTON: 'button',
+
+  // ARIA role for a checkbox button element; use with the CHECKED state.
+  CHECKBOX: 'checkbox',
+
+  // ARIA role for a column header of a table or grid.
+  COLUMNHEADER: 'columnheader',
+
+  // ARIA role for a combo box element.
+  COMBOBOX: 'combobox',
+
+  // ARIA role for a supporting section of the document.
+  COMPLEMENTARY: 'complementary',
+
+  // ARIA role for a dialog, some descendant must take initial focus.
+  DIALOG: 'dialog',
+
+  // ARIA role for a directory, like a table of contents.
+  DIRECTORY: 'directory',
+
+  // ARIA role for a part of a page that's a document, not a web application.
+  DOCUMENT: 'document',
+
+  // ARIA role for a landmark region logically considered one form.
+  FORM: 'form',
+
+  // ARIA role for an interactive control of tabular data.
+  GRID: 'grid',
+
+  // ARIA role for a cell in a grid.
+  GRIDCELL: 'gridcell',
+
+  // ARIA role for a group of related elements like tree item siblings.
+  GROUP: 'group',
+
+  // ARIA role for a heading element.
+  HEADING: 'heading',
+
+  // ARIA role for a container of elements that together comprise one image.
+  IMG: 'img',
+
+  // ARIA role for a link.
+  LINK: 'link',
+
+  // ARIA role for a list of non-interactive list items.
+  LIST: 'list',
+
+  // ARIA role for a listbox.
+  LISTBOX: 'listbox',
+
+  // ARIA role for a list item.
+  LISTITEM: 'listitem',
+
+  // ARIA role for a live region where new information is added.
+  LOG: 'log',
+
+  // ARIA landmark role for the main content in a document. Use only once.
+  MAIN: 'main',
+
+  // ARIA role for a live region of non-essential information that changes.
+  MARQUEE: 'marquee',
+
+  // ARIA role for a mathematical expression.
+  MATH: 'math',
+
+  // ARIA role for a popup menu.
+  MENU: 'menu',
+
+  // ARIA role for a menubar element containing menu elements.
+  MENUBAR: 'menubar',
+
+  // ARIA role for menu item elements.
+  MENU_ITEM: 'menuitem',
+
+  // ARIA role for a checkbox box element inside a menu.
+  MENU_ITEM_CHECKBOX: 'menuitemcheckbox',
+
+  // ARIA role for a radio button element inside a menu.
+  MENU_ITEM_RADIO: 'menuitemradio',
+
+  // ARIA landmark role for a collection of navigation links.
+  NAVIGATION: 'navigation',
+
+  // ARIA role for a section ancillary to the main content.
+  NOTE: 'note',
+
+  // ARIA role for option items that are  children of combobox, listbox, menu,
+  // radiogroup, or tree elements.
+  OPTION: 'option',
+
+  // ARIA role for ignorable cosmetic elements with no semantic significance.
+  PRESENTATION: 'presentation',
+
+  // ARIA role for a progress bar element.
+  PROGRESSBAR: 'progressbar',
+
+  // ARIA role for a radio button element.
+  RADIO: 'radio',
+
+  // ARIA role for a group of connected radio button elements.
+  RADIOGROUP: 'radiogroup',
+
+  // ARIA role for an important region of the page.
+  REGION: 'region',
+
+  // ARIA role for a row of cells in a grid.
+  ROW: 'row',
+
+  // ARIA role for a group of one or more rows in a grid.
+  ROWGROUP: 'rowgroup',
+
+  // ARIA role for a row header of a table or grid.
+  ROWHEADER: 'rowheader',
+
+  // ARIA role for a scrollbar element.
+  SCROLLBAR: 'scrollbar',
+
+  // ARIA landmark role for a part of the page providing search functionality.
+  SEARCH: 'search',
+
+  // ARIA role for a menu separator.
+  SEPARATOR: 'separator',
+
+  // ARIA role for a slider.
+  SLIDER: 'slider',
+
+  // ARIA role for a spin button.
+  SPINBUTTON: 'spinbutton',
+
+  // ARIA role for a live region with advisory info less severe than an alert.
+  STATUS: 'status',
+
+  // ARIA role for a tab button.
+  TAB: 'tab',
+
+  // ARIA role for a tab bar (i.e. a list of tab buttons).
+  TAB_LIST: 'tablist',
+
+  // ARIA role for a tab page (i.e. the element holding tab contents).
+  TAB_PANEL: 'tabpanel',
+
+  // ARIA role for a textbox element.
+  TEXTBOX: 'textbox',
+
+  // ARIA role for an element displaying elapsed time or time remaining.
+  TIMER: 'timer',
+
+  // ARIA role for a toolbar element.
+  TOOLBAR: 'toolbar',
+
+  // ARIA role for a tooltip element.
+  TOOLTIP: 'tooltip',
+
+  // ARIA role for a tree.
+  TREE: 'tree',
+
+  // ARIA role for a grid whose rows can be expanded and collapsed like a tree.
+  TREEGRID: 'treegrid',
+
+  // ARIA role for a tree item that sometimes may be expanded or collapsed.
+  TREEITEM: 'treeitem'
+};
+
+
+/**
+ * Enumeration of ARIA state values for live regions.
+ *
+ * See http://www.w3.org/TR/wai-aria/states_and_properties#aria-live
+ * for more information.
+ * @enum {string}
+ */
+goog.dom.a11y.LivePriority = {
+  /**
+   * Default value.  Used for live regions that should never be spoken.
+   */
+  OFF: 'off',
+  /**
+   * Spoke only when the user is idle.  Best option in most cases.
+   */
+  POLITE: 'polite',
+  /**
+   * Spoken as soon as possible, which means that the information has a
+   * higher priority than normal, but does not necessarily interrupt
+   * immediately.
+   */
+  ASSERTIVE: 'assertive'
+};
+
+
+/**
+ * Sets the role of an element.
+ * @param {Element} element DOM node to set role of.
+ * @param {string} roleName role name(s).
+ */
+goog.dom.a11y.setRole = function(element, roleName) {
+  element.setAttribute('role', roleName);
+};
+
+
+/**
+ * Gets role of an element.
+ * @param {Element} element DOM node to get role of.
+ * @return {string} rolename.
+ */
+goog.dom.a11y.getRole = function(element) {
+  return element.getAttribute('role') || '';
+};
+
+
+/**
+ * Sets the state or property of an element.
+ * @param {Element} element DOM node where we set state.
+ * @param {string} state State attribute being set. Automatically adds prefix
+ *     'aria-' to the state name.
+ * @param {string|boolean|number} value Value for the state attribute.
+ */
+goog.dom.a11y.setState = function(element, state, value) {
+  element.setAttribute('aria-' + state, value);
+};
+
+
+/**
+ * Gets value of specified state or property.
+ * @param {Element} element DOM node to get state from.
+ * @param {string} stateName State name.
+ * @return {string} Value of the state attribute.
+ */
+goog.dom.a11y.getState = function(element, stateName) {
+  var attrb =
+      /** @type {string|number|boolean} */(element.getAttribute('aria-' +
+          stateName));
+  // Check for multiple representations -  attrb might
+  // be a boolean or a string
+  if ((attrb === true) || (attrb === false)) {
+    return attrb ? 'true' : 'false';
+  } else if (!attrb) {
+    return '';
+  } else {
+    return String(attrb);
+  }
+};
+
+
+/**
+ * Gets the activedescendant of the given element.
+ * @param {Element} element DOM node to get activedescendant from.
+ * @return {Element} DOM node of the activedescendant.
+ */
+goog.dom.a11y.getActiveDescendant = function(element) {
+  var id = goog.dom.a11y.getState(
+      element, goog.dom.a11y.State.ACTIVEDESCENDANT);
+  return goog.dom.getOwnerDocument(element).getElementById(id);
+};
+
+
+/**
+ * Sets the activedescendant value for an element.
+ * @param {Element} element DOM node to set activedescendant to.
+ * @param {Element} activeElement DOM node being set as activedescendant.
+ */
+goog.dom.a11y.setActiveDescendant = function(element, activeElement) {
+  goog.dom.a11y.setState(element, goog.dom.a11y.State.ACTIVEDESCENDANT,
+      activeElement ? activeElement.id : '');
+};
+
+
+
+/**
+ * Class that allows messages to be spoken by assistive technologies that the
+ * user may have active.
+ *
+ * @param {goog.dom.DomHelper} domHelper DOM helper.
+ * @constructor
+ * @extends {goog.Disposable}
+ */
+goog.dom.a11y.Announcer = function(domHelper) {
+  goog.base(this);
+
+  /**
+   * @type {goog.dom.DomHelper}
+   * @private
+   */
+  this.domHelper_ = domHelper;
+
+  /**
+   * Map of priority to live region elements to use for communicating updates.
+   * Elements are created on demand.
+   * @type {Object.<goog.dom.a11y.LivePriority, Element>}
+   * @private
+   */
+  this.liveRegions_ = {};
+};
+goog.inherits(goog.dom.a11y.Announcer, goog.Disposable);
+
+
+/** @override */
+goog.dom.a11y.Announcer.prototype.disposeInternal = function() {
+  goog.object.forEach(
+      this.liveRegions_, this.domHelper_.removeNode, this.domHelper_);
+  this.liveRegions_ = null;
+  this.domHelper_ = null;
+  goog.base(this, 'disposeInternal');
+};
+
+
+/**
+ * Announce a message to be read by any assistive technologies the user may
+ * have active.
+ * @param {string} message The message to announce to screen readers.
+ * @param {goog.dom.a11y.LivePriority=} opt_priority The priority of the
+ *     message. Defaults to POLITE.
+ */
+goog.dom.a11y.Announcer.prototype.say = function(message, opt_priority) {
+  goog.dom.setTextContent(this.getLiveRegion_(
+      opt_priority || goog.dom.a11y.LivePriority.POLITE), message);
+};
+
+
+/**
+ * Returns an aria-live region that can be used to communicate announcements.
+ * @param {goog.dom.a11y.LivePriority} priority The required priority.
+ * @return {Element} A live region of the requested priority.
+ * @private
+ */
+goog.dom.a11y.Announcer.prototype.getLiveRegion_ = function(priority) {
+  if (this.liveRegions_[priority]) {
+    return this.liveRegions_[priority];
+  }
+  var liveRegion;
+  liveRegion = this.domHelper_.createElement('div');
+  liveRegion.style.position = 'absolute';
+  liveRegion.style.top = '-1000px';
+  goog.dom.a11y.setState(liveRegion, 'live', priority);
+  goog.dom.a11y.setState(liveRegion, 'atomic', 'true');
+  this.domHelper_.getDocument().body.appendChild(liveRegion);
+  this.liveRegions_[priority] = liveRegion;
+  return liveRegion;
+};
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview This behavior is applied to a text input and it shows a text
+ * message inside the element if the user hasn't entered any text.
+ *
+ * This uses the HTML5 placeholder attribute where it is supported.
+ *
+ * This is ported from http://go/labelinput.js
+ *
+ * Known issue: Safari does not allow you get to the window object from a
+ * document. We need that to listen to the onload event. For now we hard code
+ * the window to the current window.
+ *
+ * Known issue: We need to listen to the form submit event but we attach the
+ * event only once (when created or when it is changed) so if you move the DOM
+ * node to another form it will not be cleared correctly before submitting.
+ *
+ * Known issue: Where the placeholder attribute isn't supported, screen reader
+ * users encounter trouble because the label is deleted upon focus. For now we
+ * set the "aria-label" attribute.
+ *
+ * @author arv@google.com (Erik Arvidsson)
+ * @see ../demos/labelinput.html
+ */
+
+goog.provide('goog.ui.LabelInput');
+
+goog.require('goog.Timer');
+goog.require('goog.dom');
+goog.require('goog.dom.a11y');
+goog.require('goog.dom.a11y.State');
+goog.require('goog.dom.classes');
+goog.require('goog.events.EventHandler');
+goog.require('goog.events.EventType');
+goog.require('goog.ui.Component');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * This creates the label input object.
+ * @param {string=} opt_label The text to show as the label.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper.
+ * @extends {goog.ui.Component}
+ * @constructor
+ */
+goog.ui.LabelInput = function(opt_label, opt_domHelper) {
+  goog.ui.Component.call(this, opt_domHelper);
+
+  /**
+   * The text to show as the label.
+   * @type {string}
+   * @private
+   */
+  this.label_ = opt_label || '';
+};
+goog.inherits(goog.ui.LabelInput, goog.ui.Component);
+
+
+/**
+ * Variable used to store the element value on keydown and restore it on
+ * keypress.  See {@link #handleEscapeKeys_}
+ * @type {?string}
+ * @private
+ */
+goog.ui.LabelInput.prototype.ffKeyRestoreValue_ = null;
+
+
+/**
+ * Indicates whether the browser supports the placeholder attribute, new in
+ * HTML5.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_ = (
+    'placeholder' in document.createElement('input'));
+
+
+/**
+ * @type {goog.events.EventHandler}
+ * @private
+ */
+goog.ui.LabelInput.prototype.eventHandler_;
+
+
+/**
+ * @type {boolean}
+ * @private
+ */
+goog.ui.LabelInput.prototype.hasFocus_ = false;
+
+
+/**
+ * Creates the DOM nodes needed for the label input.
+ * @override
+ */
+goog.ui.LabelInput.prototype.createDom = function() {
+  this.setElementInternal(
+      this.getDomHelper().createDom('input', {'type': 'text'}));
+};
+
+
+/**
+ * Decorates an existing HTML input element as a label input. If the element
+ * has a "label" attribute then that will be used as the label property for the
+ * label input object.
+ * @param {Element} element The HTML input element to decorate.
+ * @override
+ */
+goog.ui.LabelInput.prototype.decorateInternal = function(element) {
+  goog.ui.LabelInput.superClass_.decorateInternal.call(this, element);
+  if (!this.label_) {
+    this.label_ = element.getAttribute('label') || '';
+  }
+
+  // Check if we're attaching to an element that already has focus.
+  if (goog.dom.getActiveElement(goog.dom.getOwnerDocument(element)) ==
+      element) {
+    this.hasFocus_ = true;
+    goog.dom.classes.remove(this.getElement(), this.LABEL_CLASS_NAME);
+  }
+
+  if (goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    this.getElement().placeholder = this.label_;
+    return;
+  }
+  goog.dom.a11y.setState(this.getElement(),
+                         goog.dom.a11y.State.LABEL,
+                         this.label_);
+};
+
+
+/** @override */
+goog.ui.LabelInput.prototype.enterDocument = function() {
+  goog.ui.LabelInput.superClass_.enterDocument.call(this);
+  this.attachEvents_();
+  this.check_();
+
+  // Make it easy for other closure widgets to play nicely with inputs using
+  // LabelInput:
+  this.getElement().labelInput_ = this;
+};
+
+
+/** @override */
+goog.ui.LabelInput.prototype.exitDocument = function() {
+  goog.ui.LabelInput.superClass_.exitDocument.call(this);
+  this.detachEvents_();
+
+  this.getElement().labelInput_ = null;
+};
+
+
+/**
+ * Attaches the events we need to listen to.
+ * @private
+ */
+goog.ui.LabelInput.prototype.attachEvents_ = function() {
+  var eh = new goog.events.EventHandler(this);
+  eh.listen(this.getElement(), goog.events.EventType.FOCUS, this.handleFocus_);
+  eh.listen(this.getElement(), goog.events.EventType.BLUR, this.handleBlur_);
+
+  if (goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    this.eventHandler_ = eh;
+    return;
+  }
+
+  if (goog.userAgent.GECKO) {
+    eh.listen(this.getElement(), [
+      goog.events.EventType.KEYPRESS,
+      goog.events.EventType.KEYDOWN,
+      goog.events.EventType.KEYUP
+    ], this.handleEscapeKeys_);
+  }
+
+  // IE sets defaultValue upon load so we need to test that as well.
+  var d = goog.dom.getOwnerDocument(this.getElement());
+  var w = goog.dom.getWindow(d);
+  eh.listen(w, goog.events.EventType.LOAD, this.handleWindowLoad_);
+
+  this.eventHandler_ = eh;
+  this.attachEventsToForm_();
+};
+
+
+/**
+ * Adds a listener to the form so that we can clear the input before it is
+ * submitted.
+ * @private
+ */
+goog.ui.LabelInput.prototype.attachEventsToForm_ = function() {
+  // in case we have are in a form we need to make sure the label is not
+  // submitted
+  if (!this.formAttached_ && this.eventHandler_ && this.getElement().form) {
+    this.eventHandler_.listen(this.getElement().form,
+                              goog.events.EventType.SUBMIT,
+                              this.handleFormSubmit_);
+    this.formAttached_ = true;
+  }
+};
+
+
+/**
+ * Stops listening to the events.
+ * @private
+ */
+goog.ui.LabelInput.prototype.detachEvents_ = function() {
+  if (this.eventHandler_) {
+    this.eventHandler_.dispose();
+    this.eventHandler_ = null;
+  }
+};
+
+
+/** @override */
+goog.ui.LabelInput.prototype.disposeInternal = function() {
+  goog.ui.LabelInput.superClass_.disposeInternal.call(this);
+  this.detachEvents_();
+};
+
+
+/**
+ * The CSS class name to add to the input when the user has not entered a
+ * value.
+ */
+goog.ui.LabelInput.prototype.LABEL_CLASS_NAME =
+    goog.getCssName('label-input-label');
+
+
+/**
+ * Handler for the focus event.
+ * @param {goog.events.Event} e The event object passed in to the event handler.
+ * @private
+ */
+goog.ui.LabelInput.prototype.handleFocus_ = function(e) {
+  this.hasFocus_ = true;
+  goog.dom.classes.remove(this.getElement(), this.LABEL_CLASS_NAME);
+  if (goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    return;
+  }
+  if (!this.hasChanged() && !this.inFocusAndSelect_) {
+    var me = this;
+    var clearValue = function() {
+      me.getElement().value = '';
+    };
+    if (goog.userAgent.IE) {
+      goog.Timer.callOnce(clearValue, 10);
+    } else {
+      clearValue();
+    }
+  }
+};
+
+
+/**
+ * Handler for the blur event.
+ * @param {goog.events.Event} e The event object passed in to the event handler.
+ * @private
+ */
+goog.ui.LabelInput.prototype.handleBlur_ = function(e) {
+  // We listen to the click event when we enter focusAndSelect mode so we can
+  // fake an artificial focus when the user clicks on the input box. However,
+  // if the user clicks on something else (and we lose focus), there is no
+  // need for an artificial focus event.
+  if (!goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    this.eventHandler_.unlisten(
+        this.getElement(), goog.events.EventType.CLICK, this.handleFocus_);
+    this.ffKeyRestoreValue_ = null;
+  }
+  this.hasFocus_ = false;
+  this.check_();
+};
+
+
+/**
+ * Handler for key events in Firefox.
+ *
+ * If the escape key is pressed when a text input has not been changed manually
+ * since being focused, the text input will revert to its previous value.
+ * Firefox does not honor preventDefault for the escape key. The revert happens
+ * after the keydown event and before every keypress. We therefore store the
+ * element's value on keydown and restore it on keypress. The restore value is
+ * nullified on keyup so that {@link #getValue} returns the correct value.
+ *
+ * IE and Chrome don't have this problem, Opera blurs in the input box
+ * completely in a way that preventDefault on the escape key has no effect.
+ *
+ * @param {goog.events.BrowserEvent} e The event object passed in to
+ *     the event handler.
+ * @private
+ */
+goog.ui.LabelInput.prototype.handleEscapeKeys_ = function(e) {
+  if (e.keyCode == 27) {
+    if (e.type == goog.events.EventType.KEYDOWN) {
+      this.ffKeyRestoreValue_ = this.getElement().value;
+    } else if (e.type == goog.events.EventType.KEYPRESS) {
+      this.getElement().value = /** @type {string} */ (this.ffKeyRestoreValue_);
+    } else if (e.type == goog.events.EventType.KEYUP) {
+      this.ffKeyRestoreValue_ = null;
+    }
+    e.preventDefault();
+  }
+};
+
+
+/**
+ * Handler for the submit event of the form element.
+ * @param {goog.events.Event} e The event object passed in to the event handler.
+ * @private
+ */
+goog.ui.LabelInput.prototype.handleFormSubmit_ = function(e) {
+  if (!this.hasChanged()) {
+    this.getElement().value = '';
+    // allow form to be sent before restoring value
+    goog.Timer.callOnce(this.handleAfterSubmit_, 10, this);
+  }
+};
+
+
+/**
+ * Restore value after submit
+ * @param {Event} e The event object passed in to the event handler.
+ * @private
+ */
+goog.ui.LabelInput.prototype.handleAfterSubmit_ = function(e) {
+  if (!this.hasChanged()) {
+    this.getElement().value = this.label_;
+  }
+};
+
+
+/**
+ * Handler for the load event the window. This is needed because
+ * IE sets defaultValue upon load.
+ * @param {Event} e The event object passed in to the event handler.
+ * @private
+ */
+goog.ui.LabelInput.prototype.handleWindowLoad_ = function(e) {
+  this.check_();
+};
+
+
+/**
+ * @return {boolean} Whether the control is currently focused on.
+ */
+goog.ui.LabelInput.prototype.hasFocus = function() {
+  return this.hasFocus_;
+};
+
+
+/**
+ * @return {boolean} Whether the value has changed been changed by the user.
+ */
+goog.ui.LabelInput.prototype.hasChanged = function() {
+  return !!this.getElement() && this.getElement().value != '' &&
+      this.getElement().value != this.label_;
+};
+
+
+/**
+ * Clears the value of the input element without resetting the default text.
+ */
+goog.ui.LabelInput.prototype.clear = function() {
+  this.getElement().value = '';
+
+  // Reset ffKeyRestoreValue_ when non-null
+  if (this.ffKeyRestoreValue_ != null) {
+    this.ffKeyRestoreValue_ = '';
+  }
+};
+
+
+/**
+ * Clears the value of the input element and resets the default text.
+ */
+goog.ui.LabelInput.prototype.reset = function() {
+  if (this.hasChanged()) {
+    this.clear();
+    this.check_();
+  }
+};
+
+
+/**
+ * Use this to set the value through script to ensure that the label state is
+ * up to date
+ * @param {string} s The new value for the input.
+ */
+goog.ui.LabelInput.prototype.setValue = function(s) {
+  if (this.ffKeyRestoreValue_ != null) {
+    this.ffKeyRestoreValue_ = s;
+  }
+  this.getElement().value = s;
+  this.check_();
+};
+
+
+/**
+ * Returns the current value of the text box, returning an empty string if the
+ * search box is the default value
+ * @return {string} The value of the input box.
+ */
+goog.ui.LabelInput.prototype.getValue = function() {
+  if (this.ffKeyRestoreValue_ != null) {
+    // Fix the Firefox from incorrectly reporting the value to calling code
+    // that attached the listener to keypress before the labelinput
+    return this.ffKeyRestoreValue_;
+  }
+  return this.hasChanged() ? /** @type {string} */ (this.getElement().value) :
+      '';
+};
+
+
+/**
+ * Sets the label text.
+ * @param {string} label The text to show as the label.
+ */
+goog.ui.LabelInput.prototype.setLabel = function(label) {
+  if (goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    this.label_ = label;
+    if (this.getElement()) {
+      this.getElement().placeholder = this.label_;
+    }
+    return;
+  }
+  if (this.getElement() && !this.hasChanged()) {
+    this.getElement().value = '';
+  }
+  this.label_ = label;
+  this.restoreLabel_();
+  // Check if this has been called before DOM structure building
+  if (this.getElement()) {
+    goog.dom.a11y.setState(this.getElement(),
+                           goog.dom.a11y.State.LABEL,
+                           this.label_);
+  }
+};
+
+
+/**
+ * @return {string} The text to show as the label.
+ */
+goog.ui.LabelInput.prototype.getLabel = function() {
+  return this.label_;
+};
+
+
+/**
+ * Checks the state of the input element
+ * @private
+ */
+goog.ui.LabelInput.prototype.check_ = function() {
+  if (!goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    // if we haven't got a form yet try now
+    this.attachEventsToForm_();
+    goog.dom.a11y.setState(this.getElement(),
+                           goog.dom.a11y.State.LABEL,
+                           this.label_);
+  } else if (this.getElement().placeholder != this.label_) {
+    this.getElement().placeholder = this.label_;
+  }
+
+  if (!this.hasChanged()) {
+    if (!this.inFocusAndSelect_ && !this.hasFocus_) {
+      goog.dom.classes.add(this.getElement(), this.LABEL_CLASS_NAME);
+    }
+
+    // Allow browser to catchup with CSS changes before restoring the label.
+    if (!goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+      goog.Timer.callOnce(this.restoreLabel_, 10, this);
+    }
+  } else {
+    goog.dom.classes.remove(this.getElement(), this.LABEL_CLASS_NAME);
+  }
+};
+
+
+/**
+ * This method focuses the input and if selects all the text. If the value
+ * hasn't changed it will set the value to the label so that the label text is
+ * selected.
+ */
+goog.ui.LabelInput.prototype.focusAndSelect = function() {
+  // We need to check whether the input has changed before focusing
+  var hc = this.hasChanged();
+  this.inFocusAndSelect_ = true;
+  this.getElement().focus();
+  if (!hc && !goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    this.getElement().value = this.label_;
+  }
+  this.getElement().select();
+
+  // Since the object now has focus, we won't get a focus event when they
+  // click in the input element. The expected behavior when you click on
+  // the default text is that it goes away and allows you to type...so we
+  // have to fire an artificial focus event when we're in focusAndSelect mode.
+  if (goog.ui.LabelInput.SUPPORTS_PLACEHOLDER_) {
+    return;
+  }
+  if (this.eventHandler_) {
+    this.eventHandler_.listenOnce(
+        this.getElement(), goog.events.EventType.CLICK, this.handleFocus_);
+  }
+
+  // set to false in timer to let IE trigger the focus event
+  goog.Timer.callOnce(this.focusAndSelect_, 10, this);
+};
+
+
+/**
+ * Enables/Disables the label input.
+ * @param {boolean} enabled Whether to enable (true) or disable (false) the
+ *     label input.
+ */
+goog.ui.LabelInput.prototype.setEnabled = function(enabled) {
+  this.getElement().disabled = !enabled;
+  goog.dom.classes.enable(this.getElement(),
+      goog.getCssName(this.LABEL_CLASS_NAME, 'disabled'), !enabled);
+};
+
+
+/**
+ * @return {boolean} True if the label input is enabled, false otherwise.
+ */
+goog.ui.LabelInput.prototype.isEnabled = function() {
+  return !this.getElement().disabled;
+};
+
+
+/**
+ * @private
+ */
+goog.ui.LabelInput.prototype.focusAndSelect_ = function() {
+  this.inFocusAndSelect_ = false;
+};
+
+
+/**
+ * Sets the value of the input element to label.
+ * @private
+ */
+goog.ui.LabelInput.prototype.restoreLabel_ = function() {
+  // Check again in case something changed since this was scheduled.
+  // We check that the element is still there since this is called by a timer
+  // and the dispose method may have been called prior to this.
+  if (this.getElement() && !this.hasChanged() && !this.hasFocus_) {
+    this.getElement().value = this.label_;
+  }
+};
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Definition of the goog.ui.ItemEvent class.
+ *
+ */
+
+goog.provide('goog.ui.ItemEvent');
+
+
+goog.require('goog.events.Event');
+
+
+
+/**
+ * Generic ui event class for events that take a single item like a menu click
+ * event.
+ *
+ * @constructor
+ * @extends {goog.events.Event}
+ * @param {string} type Event Type.
+ * @param {Object} target Reference to the object that is the target
+ *                        of this event.
+ * @param {Object} item The item that was clicked.
+ */
+goog.ui.ItemEvent = function(type, target, item) {
+  goog.events.Event.call(this, type, target);
+
+  /**
+   * Item for the event. The type of this object is specific to the type
+   * of event. For a menu, it would be the menu item that was clicked. For a
+   * listbox selection, it would be the listitem that was selected.
+   *
+   * @type {Object}
+   */
+  this.item = item;
+};
+goog.inherits(goog.ui.ItemEvent, goog.events.Event);
+// Copyright 2009 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Type declaration for control content.
+ *
+ * @author nicksantos@google.com (Nick Santos)
+ */
+goog.provide('goog.ui.ControlContent');
+
+
+/**
+ * Type declaration for text caption or DOM structure to be used as the content
+ * of {@link goog.ui.Control}s.
+ * @typedef {string|Node|Array.<Node>|NodeList}
+ */
+goog.ui.ControlContent;
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Base class for control renderers.
+ * TODO(attila):  If the renderer framework works well, pull it into Component.
+ *
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.ControlRenderer');
+
+goog.require('goog.array');
+goog.require('goog.dom');
+goog.require('goog.dom.a11y');
+goog.require('goog.dom.a11y.State');
+goog.require('goog.dom.classes');
+goog.require('goog.object');
+goog.require('goog.style');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.ControlContent');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * Default renderer for {@link goog.ui.Control}s.  Can be used as-is, but
+ * subclasses of Control will probably want to use renderers specifically
+ * tailored for them by extending this class.  Controls that use renderers
+ * delegate one or more of the following API methods to the renderer:
+ * <ul>
+ *    <li>{@code createDom} - renders the DOM for the component
+ *    <li>{@code canDecorate} - determines whether an element can be decorated
+ *        by the component
+ *    <li>{@code decorate} - decorates an existing element with the component
+ *    <li>{@code setState} - updates the appearance of the component based on
+ *        its state
+ *    <li>{@code getContent} - returns the component's content
+ *    <li>{@code setContent} - sets the component's content
+ * </ul>
+ * Controls are stateful; renderers, on the other hand, should be stateless and
+ * reusable.
+ * @constructor
+ */
+goog.ui.ControlRenderer = function() {
+};
+goog.addSingletonGetter(goog.ui.ControlRenderer);
+
+
+/**
+ * Constructs a new renderer and sets the CSS class that the renderer will use
+ * as the base CSS class to apply to all elements rendered by that renderer.
+ * An example to use this function using a color palette:
+ *
+ * <pre>
+ * var myCustomRenderer = goog.ui.ControlRenderer.getCustomRenderer(
+ *     goog.ui.PaletteRenderer, 'my-special-palette');
+ * var newColorPalette = new goog.ui.ColorPalette(
+ *     colors, myCustomRenderer, opt_domHelper);
+ * </pre>
+ *
+ * Your CSS can look like this now:
+ * <pre>
+ * .my-special-palette { }
+ * .my-special-palette-table { }
+ * .my-special-palette-cell { }
+ * etc.
+ * </pre>
+ *
+ * <em>instead</em> of
+ * <pre>
+ * .CSS_MY_SPECIAL_PALETTE .goog-palette { }
+ * .CSS_MY_SPECIAL_PALETTE .goog-palette-table { }
+ * .CSS_MY_SPECIAL_PALETTE .goog-palette-cell { }
+ * etc.
+ * </pre>
+ *
+ * You would want to use this functionality when you want an instance of a
+ * component to have specific styles different than the other components of the
+ * same type in your application.  This avoids using descendant selectors to
+ * apply the specific styles to this component.
+ *
+ * @param {Function} ctor The constructor of the renderer you are trying to
+ *     create.
+ * @param {string} cssClassName The name of the CSS class for this renderer.
+ * @return {goog.ui.ControlRenderer} An instance of the desired renderer with
+ *     its getCssClass() method overridden to return the supplied custom CSS
+ *     class name.
+ */
+goog.ui.ControlRenderer.getCustomRenderer = function(ctor, cssClassName) {
+  var renderer = new ctor();
+
+  /**
+   * Returns the CSS class to be applied to the root element of components
+   * rendered using this renderer.
+   * @return {string} Renderer-specific CSS class.
+   */
+  renderer.getCssClass = function() {
+    return cssClassName;
+  };
+
+  return renderer;
+};
+
+
+/**
+ * Default CSS class to be applied to the root element of components rendered
+ * by this renderer.
+ * @type {string}
+ */
+goog.ui.ControlRenderer.CSS_CLASS = goog.getCssName('goog-control');
+
+
+/**
+ * Array of arrays of CSS classes that we want composite classes added and
+ * removed for in IE6 and lower as a workaround for lack of multi-class CSS
+ * selector support.
+ *
+ * Subclasses that have accompanying CSS requiring this workaround should define
+ * their own static IE6_CLASS_COMBINATIONS constant and override
+ * getIe6ClassCombinations to return it.
+ *
+ * For example, if your stylesheet uses the selector .button.collapse-left
+ * (and is compiled to .button_collapse-left for the IE6 version of the
+ * stylesheet,) you should include ['button', 'collapse-left'] in this array
+ * and the class button_collapse-left will be applied to the root element
+ * whenever both button and collapse-left are applied individually.
+ *
+ * Members of each class name combination will be joined with underscores in the
+ * order that they're defined in the array. You should alphabetize them (for
+ * compatibility with the CSS compiler) unless you are doing something special.
+ * @type {Array.<Array.<string>>}
+ */
+goog.ui.ControlRenderer.IE6_CLASS_COMBINATIONS = [];
+
+
+/**
+ * Map of component states to corresponding ARIA states.  Since the mapping of
+ * component states to ARIA states is neither component- nor renderer-specific,
+ * this is a static property of the renderer class, and is initialized on first
+ * use.
+ * @type {Object}
+ * @private
+ */
+goog.ui.ControlRenderer.ARIA_STATE_MAP_;
+
+
+/**
+ * Returns the ARIA role to be applied to the control.
+ * See http://wiki/Main/ARIA for more info.
+ * @return {goog.dom.a11y.Role|undefined} ARIA role.
+ */
+goog.ui.ControlRenderer.prototype.getAriaRole = function() {
+  // By default, the ARIA role is unspecified.
+  return undefined;
+};
+
+
+/**
+ * Returns the control's contents wrapped in a DIV, with the renderer's own
+ * CSS class and additional state-specific classes applied to it.
+ * @param {goog.ui.Control} control Control to render.
+ * @return {Element} Root element for the control.
+ */
+goog.ui.ControlRenderer.prototype.createDom = function(control) {
+  // Create and return DIV wrapping contents.
+  var element = control.getDomHelper().createDom(
+      'div', this.getClassNames(control).join(' '), control.getContent());
+
+  this.setAriaStates(control, element);
+  return element;
+};
+
+
+/**
+ * Takes the control's root element and returns the parent element of the
+ * control's contents.  Since by default controls are rendered as a single
+ * DIV, the default implementation returns the element itself.  Subclasses
+ * with more complex DOM structures must override this method as needed.
+ * @param {Element} element Root element of the control whose content element
+ *     is to be returned.
+ * @return {Element} The control's content element.
+ */
+goog.ui.ControlRenderer.prototype.getContentElement = function(element) {
+  return element;
+};
+
+
+/**
+ * Updates the control's DOM by adding or removing the specified class name
+ * to/from its root element. May add additional combined classes as needed in
+ * IE6 and lower. Because of this, subclasses should use this method when
+ * modifying class names on the control's root element.
+ * @param {goog.ui.Control|Element} control Control instance (or root element)
+ *     to be updated.
+ * @param {string} className CSS class name to add or remove.
+ * @param {boolean} enable Whether to add or remove the class name.
+ */
+goog.ui.ControlRenderer.prototype.enableClassName = function(control,
+    className, enable) {
+  var element = (/** @type {Element} */
+      control.getElement ? control.getElement() : control);
+  if (element) {
+    // For IE6, we need to enable any combined classes involving this class
+    // as well.
+    if (goog.userAgent.IE && !goog.userAgent.isVersion('7')) {
+      var combinedClasses = this.getAppliedCombinedClassNames_(
+          goog.dom.classes.get(element), className);
+      combinedClasses.push(className);
+      var f = enable ? goog.dom.classes.add : goog.dom.classes.remove;
+      goog.partial(f, element).apply(null, combinedClasses);
+    } else {
+      goog.dom.classes.enable(element, className, enable);
+    }
+  }
+};
+
+
+/**
+ * Updates the control's DOM by adding or removing the specified extra class
+ * name to/from its element.
+ * @param {goog.ui.Control} control Control to be updated.
+ * @param {string} className CSS class name to add or remove.
+ * @param {boolean} enable Whether to add or remove the class name.
+ */
+goog.ui.ControlRenderer.prototype.enableExtraClassName = function(control,
+    className, enable) {
+  // The base class implementation is trivial; subclasses should override as
+  // needed.
+  this.enableClassName(control, className, enable);
+};
+
+
+/**
+ * Returns true if this renderer can decorate the element, false otherwise.
+ * The default implementation always returns true.
+ * @param {Element} element Element to decorate.
+ * @return {boolean} Whether the renderer can decorate the element.
+ */
+goog.ui.ControlRenderer.prototype.canDecorate = function(element) {
+  return true;
+};
+
+
+/**
+ * Default implementation of {@code decorate} for {@link goog.ui.Control}s.
+ * Initializes the control's ID, content, and state based on the ID of the
+ * element, its child nodes, and its CSS classes, respectively.  Returns the
+ * element.
+ * @param {goog.ui.Control} control Control instance to decorate the element.
+ * @param {Element} element Element to decorate.
+ * @return {Element} Decorated element.
+ * @suppress {visibility} setContentInternal and setStateInternal
+ */
+goog.ui.ControlRenderer.prototype.decorate = function(control, element) {
+  // Set the control's ID to the decorated element's DOM ID, if any.
+  if (element.id) {
+    control.setId(element.id);
+  }
+
+  // Set the control's content to the decorated element's content.
+  var contentElem = this.getContentElement(element);
+  if (contentElem && contentElem.firstChild) {
+    control.setContentInternal(contentElem.firstChild.nextSibling ?
+        goog.array.clone(contentElem.childNodes) : contentElem.firstChild);
+  } else {
+    control.setContentInternal(null);
+  }
+
+  // Initialize the control's state based on the decorated element's CSS class.
+  // This implementation is optimized to minimize object allocations, string
+  // comparisons, and DOM access.
+  var state = 0x00;
+  var rendererClassName = this.getCssClass();
+  var structuralClassName = this.getStructuralCssClass();
+  var hasRendererClassName = false;
+  var hasStructuralClassName = false;
+  var hasCombinedClassName = false;
+  var classNames = goog.dom.classes.get(element);
+  goog.array.forEach(classNames, function(className) {
+    if (!hasRendererClassName && className == rendererClassName) {
+      hasRendererClassName = true;
+      if (structuralClassName == rendererClassName) {
+        hasStructuralClassName = true;
+      }
+    } else if (!hasStructuralClassName && className == structuralClassName) {
+      hasStructuralClassName = true;
+    } else {
+      state |= this.getStateFromClass(className);
+    }
+  }, this);
+  control.setStateInternal(state);
+
+  // Make sure the element has the renderer's CSS classes applied, as well as
+  // any extra class names set on the control.
+  if (!hasRendererClassName) {
+    classNames.push(rendererClassName);
+    if (structuralClassName == rendererClassName) {
+      hasStructuralClassName = true;
+    }
+  }
+  if (!hasStructuralClassName) {
+    classNames.push(structuralClassName);
+  }
+  var extraClassNames = control.getExtraClassNames();
+  if (extraClassNames) {
+    classNames.push.apply(classNames, extraClassNames);
+  }
+
+  // For IE6, rewrite all classes on the decorated element if any combined
+  // classes apply.
+  if (goog.userAgent.IE && !goog.userAgent.isVersion('7')) {
+    var combinedClasses = this.getAppliedCombinedClassNames_(
+        classNames);
+    if (combinedClasses.length > 0) {
+      classNames.push.apply(classNames, combinedClasses);
+      hasCombinedClassName = true;
+    }
+  }
+
+  // Only write to the DOM if new class names had to be added to the element.
+  if (!hasRendererClassName || !hasStructuralClassName ||
+      extraClassNames || hasCombinedClassName) {
+    goog.dom.classes.set(element, classNames.join(' '));
+  }
+
+  this.setAriaStates(control, element);
+  return element;
+};
+
+
+/**
+ * Initializes the control's DOM by configuring properties that can only be set
+ * after the DOM has entered the document.  This implementation sets up BiDi
+ * and keyboard focus.  Called from {@link goog.ui.Control#enterDocument}.
+ * @param {goog.ui.Control} control Control whose DOM is to be initialized
+ *     as it enters the document.
+ */
+goog.ui.ControlRenderer.prototype.initializeDom = function(control) {
+  // Initialize render direction (BiDi).  We optimize the left-to-right render
+  // direction by assuming that elements are left-to-right by default, and only
+  // updating their styling if they are explicitly set to right-to-left.
+  if (control.isRightToLeft()) {
+    this.setRightToLeft(control.getElement(), true);
+  }
+
+  // Initialize keyboard focusability (tab index).  We assume that components
+  // aren't focusable by default (i.e have no tab index), and only touch the
+  // DOM if the component is focusable, enabled, and visible, and therefore
+  // needs a tab index.
+  if (control.isEnabled()) {
+    this.setFocusable(control, control.isVisible());
+  }
+};
+
+
+/**
+ * Sets the element's ARIA role.
+ * @param {Element} element Element to update.
+ * @param {?goog.dom.a11y.Role=} opt_preferredRole The preferred ARIA role.
+ */
+goog.ui.ControlRenderer.prototype.setAriaRole = function(element,
+    opt_preferredRole) {
+  var ariaRole = opt_preferredRole || this.getAriaRole();
+  if (ariaRole) {
+    goog.dom.a11y.setRole(element, ariaRole);
+  }
+};
+
+
+/**
+ * Sets the element's ARIA states. An element does not need an ARIA role in
+ * order to have an ARIA state. Only states which are initialized to be true
+ * will be set.
+ * @param {!goog.ui.Control} control Control whose ARIA state will be updated.
+ * @param {!Element} element Element whose ARIA state is to be updated.
+ */
+goog.ui.ControlRenderer.prototype.setAriaStates = function(control, element) {
+  goog.asserts.assert(control);
+  goog.asserts.assert(element);
+  if (!control.isEnabled()) {
+    this.updateAriaState(element, goog.ui.Component.State.DISABLED,
+                         true);
+  }
+  if (control.isSelected()) {
+    this.updateAriaState(element, goog.ui.Component.State.SELECTED,
+                         true);
+  }
+  if (control.isSupportedState(goog.ui.Component.State.CHECKED)) {
+    this.updateAriaState(element, goog.ui.Component.State.CHECKED,
+                         control.isChecked());
+  }
+  if (control.isSupportedState(goog.ui.Component.State.OPENED)) {
+    this.updateAriaState(element, goog.ui.Component.State.OPENED,
+                         control.isOpen());
+  }
+};
+
+
+/**
+ * Allows or disallows text selection within the control's DOM.
+ * @param {Element} element The control's root element.
+ * @param {boolean} allow Whether the element should allow text selection.
+ */
+goog.ui.ControlRenderer.prototype.setAllowTextSelection = function(element,
+    allow) {
+  // On all browsers other than IE and Opera, it isn't necessary to recursively
+  // apply unselectable styling to the element's children.
+  goog.style.setUnselectable(element, !allow,
+      !goog.userAgent.IE && !goog.userAgent.OPERA);
+};
+
+
+/**
+ * Applies special styling to/from the control's element if it is rendered
+ * right-to-left, and removes it if it is rendered left-to-right.
+ * @param {Element} element The control's root element.
+ * @param {boolean} rightToLeft Whether the component is rendered
+ *     right-to-left.
+ */
+goog.ui.ControlRenderer.prototype.setRightToLeft = function(element,
+    rightToLeft) {
+  this.enableClassName(element,
+      goog.getCssName(this.getStructuralCssClass(), 'rtl'), rightToLeft);
+};
+
+
+/**
+ * Returns true if the control's key event target supports keyboard focus
+ * (based on its {@code tabIndex} attribute), false otherwise.
+ * @param {goog.ui.Control} control Control whose key event target is to be
+ *     checked.
+ * @return {boolean} Whether the control's key event target is focusable.
+ */
+goog.ui.ControlRenderer.prototype.isFocusable = function(control) {
+  var keyTarget;
+  if (control.isSupportedState(goog.ui.Component.State.FOCUSED) &&
+      (keyTarget = control.getKeyEventTarget())) {
+    return goog.dom.isFocusableTabIndex(keyTarget);
+  }
+  return false;
+};
+
+
+/**
+ * Updates the control's key event target to make it focusable or non-focusable
+ * via its {@code tabIndex} attribute.  Does nothing if the control doesn't
+ * support the {@code FOCUSED} state, or if it has no key event target.
+ * @param {goog.ui.Control} control Control whose key event target is to be
+ *     updated.
+ * @param {boolean} focusable Whether to enable keyboard focus support on the
+ *     control's key event target.
+ */
+goog.ui.ControlRenderer.prototype.setFocusable = function(control, focusable) {
+  var keyTarget;
+  if (control.isSupportedState(goog.ui.Component.State.FOCUSED) &&
+      (keyTarget = control.getKeyEventTarget())) {
+    if (!focusable && control.isFocused()) {
+      // Blur before hiding.  Note that IE calls onblur handlers asynchronously.
+      try {
+        keyTarget.blur();
+      } catch (e) {
+        // TODO(user|user):  Find out why this fails on IE.
+      }
+      // The blur event dispatched by the key event target element when blur()
+      // was called on it should have been handled by the control's handleBlur()
+      // method, so at this point the control should no longer be focused.
+      // However, blur events are unreliable on IE and FF3, so if at this point
+      // the control is still focused, we trigger its handleBlur() method
+      // programmatically.
+      if (control.isFocused()) {
+        control.handleBlur(null);
+      }
+    }
+    // Don't overwrite existing tab index values unless needed.
+    if (goog.dom.isFocusableTabIndex(keyTarget) != focusable) {
+      goog.dom.setFocusableTabIndex(keyTarget, focusable);
+    }
+  }
+};
+
+
+/**
+ * Shows or hides the element.
+ * @param {Element} element Element to update.
+ * @param {boolean} visible Whether to show the element.
+ */
+goog.ui.ControlRenderer.prototype.setVisible = function(element, visible) {
+  // The base class implementation is trivial; subclasses should override as
+  // needed.  It should be possible to do animated reveals, for example.
+  goog.style.showElement(element, visible);
+};
+
+
+/**
+ * Updates the appearance of the control in response to a state change.
+ * @param {goog.ui.Control} control Control instance to update.
+ * @param {goog.ui.Component.State} state State to enable or disable.
+ * @param {boolean} enable Whether the control is entering or exiting the state.
+ */
+goog.ui.ControlRenderer.prototype.setState = function(control, state, enable) {
+  var element = control.getElement();
+  if (element) {
+    var className = this.getClassForState(state);
+    if (className) {
+      this.enableClassName(control, className, enable);
+    }
+    this.updateAriaState(element, state, enable);
+  }
+};
+
+
+/**
+ * Updates the element's ARIA (accessibility) state.
+ * @param {Element} element Element whose ARIA state is to be updated.
+ * @param {goog.ui.Component.State} state Component state being enabled or
+ *     disabled.
+ * @param {boolean} enable Whether the state is being enabled or disabled.
+ * @protected
+ */
+goog.ui.ControlRenderer.prototype.updateAriaState = function(element, state,
+    enable) {
+  // Ensure the ARIA state map exists.
+  if (!goog.ui.ControlRenderer.ARIA_STATE_MAP_) {
+    goog.ui.ControlRenderer.ARIA_STATE_MAP_ = goog.object.create(
+        goog.ui.Component.State.DISABLED, goog.dom.a11y.State.DISABLED,
+        goog.ui.Component.State.SELECTED, goog.dom.a11y.State.SELECTED,
+        goog.ui.Component.State.CHECKED, goog.dom.a11y.State.CHECKED,
+        goog.ui.Component.State.OPENED, goog.dom.a11y.State.EXPANDED);
+  }
+  var ariaState = goog.ui.ControlRenderer.ARIA_STATE_MAP_[state];
+  if (ariaState) {
+    goog.dom.a11y.setState(element, ariaState, enable);
+  }
+};
+
+
+/**
+ * Takes a control's root element, and sets its content to the given text
+ * caption or DOM structure.  The default implementation replaces the children
+ * of the given element.  Renderers that create more complex DOM structures
+ * must override this method accordingly.
+ * @param {Element} element The control's root element.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure to be
+ *     set as the control's content. The DOM nodes will not be cloned, they
+ *     will only moved under the content element of the control.
+ */
+goog.ui.ControlRenderer.prototype.setContent = function(element, content) {
+  var contentElem = this.getContentElement(element);
+  if (contentElem) {
+    goog.dom.removeChildren(contentElem);
+    if (content) {
+      if (goog.isString(content)) {
+        goog.dom.setTextContent(contentElem, content);
+      } else {
+        var childHandler = function(child) {
+          if (child) {
+            var doc = goog.dom.getOwnerDocument(contentElem);
+            contentElem.appendChild(goog.isString(child) ?
+                doc.createTextNode(child) : child);
+          }
+        };
+        if (goog.isArray(content)) {
+          // Array of nodes.
+          goog.array.forEach(content, childHandler);
+        } else if (goog.isArrayLike(content) && !('nodeType' in content)) {
+          // NodeList. The second condition filters out TextNode which also has
+          // length attribute but is not array like. The nodes have to be cloned
+          // because childHandler removes them from the list during iteration.
+          goog.array.forEach(goog.array.clone(/** @type {NodeList} */(content)),
+              childHandler);
+        } else {
+          // Node or string.
+          childHandler(content);
+        }
+      }
+    }
+  }
+};
+
+
+/**
+ * Returns the element within the component's DOM that should receive keyboard
+ * focus (null if none).  The default implementation returns the control's root
+ * element.
+ * @param {goog.ui.Control} control Control whose key event target is to be
+ *     returned.
+ * @return {Element} The key event target.
+ */
+goog.ui.ControlRenderer.prototype.getKeyEventTarget = function(control) {
+  return control.getElement();
+};
+
+
+// CSS class name management.
+
+
+/**
+ * Returns the CSS class name to be applied to the root element of all
+ * components rendered or decorated using this renderer.  The class name
+ * is expected to uniquely identify the renderer class, i.e. no two
+ * renderer classes are expected to share the same CSS class name.
+ * @return {string} Renderer-specific CSS class name.
+ */
+goog.ui.ControlRenderer.prototype.getCssClass = function() {
+  return goog.ui.ControlRenderer.CSS_CLASS;
+};
+
+
+/**
+ * Returns an array of combinations of classes to apply combined class names for
+ * in IE6 and below. See {@link IE6_CLASS_COMBINATIONS} for more detail. This
+ * method doesn't reference {@link IE6_CLASS_COMBINATIONS} so that it can be
+ * compiled out, but subclasses should return their IE6_CLASS_COMBINATIONS
+ * static constant instead.
+ * @return {Array.<Array.<string>>} Array of class name combinations.
+ */
+goog.ui.ControlRenderer.prototype.getIe6ClassCombinations = function() {
+  return [];
+};
+
+
+/**
+ * Returns the name of a DOM structure-specific CSS class to be applied to the
+ * root element of all components rendered or decorated using this renderer.
+ * Unlike the class name returned by {@link #getCssClass}, the structural class
+ * name may be shared among different renderers that generate similar DOM
+ * structures.  The structural class name also serves as the basis of derived
+ * class names used to identify and style structural elements of the control's
+ * DOM, as well as the basis for state-specific class names.  The default
+ * implementation returns the same class name as {@link #getCssClass}, but
+ * subclasses are expected to override this method as needed.
+ * @return {string} DOM structure-specific CSS class name (same as the renderer-
+ *     specific CSS class name by default).
+ */
+goog.ui.ControlRenderer.prototype.getStructuralCssClass = function() {
+  return this.getCssClass();
+};
+
+
+/**
+ * Returns all CSS class names applicable to the given control, based on its
+ * state.  The return value is an array of strings containing
+ * <ol>
+ *   <li>the renderer-specific CSS class returned by {@link #getCssClass},
+ *       followed by
+ *   <li>the structural CSS class returned by {@link getStructuralCssClass} (if
+ *       different from the renderer-specific CSS class), followed by
+ *   <li>any state-specific classes returned by {@link #getClassNamesForState},
+ *       followed by
+ *   <li>any extra classes returned by the control's {@code getExtraClassNames}
+ *       method and
+ *   <li>for IE6 and lower, additional combined classes from
+ *       {@link getAppliedCombinedClassNames_}.
+ * </ol>
+ * Since all controls have at least one renderer-specific CSS class name, this
+ * method is guaranteed to return an array of at least one element.
+ * @param {goog.ui.Control} control Control whose CSS classes are to be
+ *     returned.
+ * @return {Array.<string>} Array of CSS class names applicable to the control.
+ * @protected
+ */
+goog.ui.ControlRenderer.prototype.getClassNames = function(control) {
+  var cssClass = this.getCssClass();
+
+  // Start with the renderer-specific class name.
+  var classNames = [cssClass];
+
+  // Add structural class name, if different.
+  var structuralCssClass = this.getStructuralCssClass();
+  if (structuralCssClass != cssClass) {
+    classNames.push(structuralCssClass);
+  }
+
+  // Add state-specific class names, if any.
+  var classNamesForState = this.getClassNamesForState(control.getState());
+  classNames.push.apply(classNames, classNamesForState);
+
+  // Add extra class names, if any.
+  var extraClassNames = control.getExtraClassNames();
+  if (extraClassNames) {
+    classNames.push.apply(classNames, extraClassNames);
+  }
+
+  // Add composite classes for IE6 support
+  if (goog.userAgent.IE && !goog.userAgent.isVersion('7')) {
+    classNames.push.apply(classNames,
+        this.getAppliedCombinedClassNames_(classNames));
+  }
+
+  return classNames;
+};
+
+
+/**
+ * Returns an array of all the combined class names that should be applied based
+ * on the given list of classes. Checks the result of
+ * {@link getIe6ClassCombinations} for any combinations that have all
+ * members contained in classes. If a combination matches, the members are
+ * joined with an underscore (in order), and added to the return array.
+ *
+ * If opt_includedClass is provided, return only the combined classes that have
+ * all members contained in classes AND include opt_includedClass as well.
+ * opt_includedClass is added to classes as well.
+ * @param {Array.<string>} classes Array of classes to return matching combined
+ *     classes for.
+ * @param {?string=} opt_includedClass If provided, get only the combined
+ *     classes that include this one.
+ * @return {Array.<string>} Array of combined class names that should be
+ *     applied.
+ * @private
+ */
+goog.ui.ControlRenderer.prototype.getAppliedCombinedClassNames_ = function(
+    classes, opt_includedClass) {
+  var toAdd = [];
+  if (opt_includedClass) {
+    classes = classes.concat([opt_includedClass]);
+  }
+  goog.array.forEach(this.getIe6ClassCombinations(), function(combo) {
+    if (goog.array.every(combo, goog.partial(goog.array.contains, classes)) &&
+        (!opt_includedClass || goog.array.contains(combo, opt_includedClass))) {
+      toAdd.push(combo.join('_'));
+    }
+  });
+  return toAdd;
+};
+
+
+/**
+ * Takes a bit mask of {@link goog.ui.Component.State}s, and returns an array
+ * of the appropriate class names representing the given state, suitable to be
+ * applied to the root element of a component rendered using this renderer, or
+ * null if no state-specific classes need to be applied.  This default
+ * implementation uses the renderer's {@link getClassForState} method to
+ * generate each state-specific class.
+ * @param {number} state Bit mask of component states.
+ * @return {!Array.<string>} Array of CSS class names representing the given
+ *     state.
+ * @protected
+ */
+goog.ui.ControlRenderer.prototype.getClassNamesForState = function(state) {
+  var classNames = [];
+  while (state) {
+    // For each enabled state, push the corresponding CSS class name onto
+    // the classNames array.
+    var mask = state & -state;  // Least significant bit
+    classNames.push(this.getClassForState(
+        /** @type {goog.ui.Component.State} */ (mask)));
+    state &= ~mask;
+  }
+  return classNames;
+};
+
+
+/**
+ * Takes a single {@link goog.ui.Component.State}, and returns the
+ * corresponding CSS class name (null if none).
+ * @param {goog.ui.Component.State} state Component state.
+ * @return {string|undefined} CSS class representing the given state (undefined
+ *     if none).
+ * @protected
+ */
+goog.ui.ControlRenderer.prototype.getClassForState = function(state) {
+  if (!this.classByState_) {
+    this.createClassByStateMap_();
+  }
+  return this.classByState_[state];
+};
+
+
+/**
+ * Takes a single CSS class name which may represent a component state, and
+ * returns the corresponding component state (0x00 if none).
+ * @param {string} className CSS class name, possibly representing a component
+ *     state.
+ * @return {goog.ui.Component.State} state Component state corresponding
+ *     to the given CSS class (0x00 if none).
+ * @protected
+ */
+goog.ui.ControlRenderer.prototype.getStateFromClass = function(className) {
+  if (!this.stateByClass_) {
+    this.createStateByClassMap_();
+  }
+  var state = parseInt(this.stateByClass_[className], 10);
+  return /** @type {goog.ui.Component.State} */ (isNaN(state) ? 0x00 : state);
+};
+
+
+/**
+ * Creates the lookup table of states to classes, used during state changes.
+ * @private
+ */
+goog.ui.ControlRenderer.prototype.createClassByStateMap_ = function() {
+  var baseClass = this.getStructuralCssClass();
+
+  /**
+   * Map of component states to state-specific structural class names,
+   * used when changing the DOM in response to a state change.  Precomputed
+   * and cached on first use to minimize object allocations and string
+   * concatenation.
+   * @type {Object}
+   * @private
+   */
+  this.classByState_ = goog.object.create(
+      goog.ui.Component.State.DISABLED, goog.getCssName(baseClass, 'disabled'),
+      goog.ui.Component.State.HOVER, goog.getCssName(baseClass, 'hover'),
+      goog.ui.Component.State.ACTIVE, goog.getCssName(baseClass, 'active'),
+      goog.ui.Component.State.SELECTED, goog.getCssName(baseClass, 'selected'),
+      goog.ui.Component.State.CHECKED, goog.getCssName(baseClass, 'checked'),
+      goog.ui.Component.State.FOCUSED, goog.getCssName(baseClass, 'focused'),
+      goog.ui.Component.State.OPENED, goog.getCssName(baseClass, 'open'));
+};
+
+
+/**
+ * Creates the lookup table of classes to states, used during decoration.
+ * @private
+ */
+goog.ui.ControlRenderer.prototype.createStateByClassMap_ = function() {
+  // We need the classByState_ map so we can transpose it.
+  if (!this.classByState_) {
+    this.createClassByStateMap_();
+  }
+
+  /**
+   * Map of state-specific structural class names to component states,
+   * used during element decoration.  Precomputed and cached on first use
+   * to minimize object allocations and string concatenation.
+   * @type {Object}
+   * @private
+   */
+  this.stateByClass_ = goog.object.transpose(this.classByState_);
+};
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Global renderer and decorator registry.
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.registry');
+
+goog.require('goog.dom.classes');
+
+
+/**
+ * Given a {@link goog.ui.Component} constructor, returns an instance of its
+ * default renderer.  If the default renderer is a singleton, returns the
+ * singleton instance; otherwise returns a new instance of the renderer class.
+ * @param {Function} componentCtor Component constructor function (for example
+ *     {@code goog.ui.Button}).
+ * @return {goog.ui.ControlRenderer?} Renderer instance (for example the
+ *     singleton instance of {@code goog.ui.ButtonRenderer}), or null if
+ *     no default renderer was found.
+ */
+goog.ui.registry.getDefaultRenderer = function(componentCtor) {
+  // Locate the default renderer based on the constructor's unique ID.  If no
+  // renderer is registered for this class, walk up the superClass_ chain.
+  var key;
+  /** @type {Function|undefined} */ var rendererCtor;
+  while (componentCtor) {
+    key = goog.getUid(componentCtor);
+    if ((rendererCtor = goog.ui.registry.defaultRenderers_[key])) {
+      break;
+    }
+    componentCtor = componentCtor.superClass_ ?
+        componentCtor.superClass_.constructor : null;
+  }
+
+  // If the renderer has a static getInstance method, return the singleton
+  // instance; otherwise create and return a new instance.
+  if (rendererCtor) {
+    return goog.isFunction(rendererCtor.getInstance) ?
+        rendererCtor.getInstance() : new rendererCtor();
+  }
+
+  return null;
+};
+
+
+/**
+ * Sets the default renderer for the given {@link goog.ui.Component}
+ * constructor.
+ * @param {Function} componentCtor Component constructor function (for example
+ *     {@code goog.ui.Button}).
+ * @param {Function} rendererCtor Renderer constructor function (for example
+ *     {@code goog.ui.ButtonRenderer}).
+ * @throws {Error} If the arguments aren't functions.
+ */
+goog.ui.registry.setDefaultRenderer = function(componentCtor, rendererCtor) {
+  // In this case, explicit validation has negligible overhead (since each
+  // renderer is only registered once), and helps catch subtle bugs.
+  if (!goog.isFunction(componentCtor)) {
+    throw Error('Invalid component class ' + componentCtor);
+  }
+  if (!goog.isFunction(rendererCtor)) {
+    throw Error('Invalid renderer class ' + rendererCtor);
+  }
+
+  // Map the component constructor's unique ID to the renderer constructor.
+  var key = goog.getUid(componentCtor);
+  goog.ui.registry.defaultRenderers_[key] = rendererCtor;
+};
+
+
+/**
+ * Returns the {@link goog.ui.Component} instance created by the decorator
+ * factory function registered for the given CSS class name, or null if no
+ * decorator factory function was found.
+ * @param {string} className CSS class name.
+ * @return {goog.ui.Component?} Component instance.
+ */
+goog.ui.registry.getDecoratorByClassName = function(className) {
+  return className in goog.ui.registry.decoratorFunctions_ ?
+      goog.ui.registry.decoratorFunctions_[className]() : null;
+};
+
+
+/**
+ * Maps a CSS class name to a function that returns a new instance of
+ * {@link goog.ui.Component} or a subclass, suitable to decorate an element
+ * that has the specified CSS class.
+ * @param {string} className CSS class name.
+ * @param {Function} decoratorFn No-argument function that returns a new
+ *     instance of a {@link goog.ui.Component} to decorate an element.
+ * @throws {Error} If the class name or the decorator function is invalid.
+ */
+goog.ui.registry.setDecoratorByClassName = function(className, decoratorFn) {
+  // In this case, explicit validation has negligible overhead (since each
+  // decorator  is only registered once), and helps catch subtle bugs.
+  if (!className) {
+    throw Error('Invalid class name ' + className);
+  }
+  if (!goog.isFunction(decoratorFn)) {
+    throw Error('Invalid decorator function ' + decoratorFn);
+  }
+
+  goog.ui.registry.decoratorFunctions_[className] = decoratorFn;
+};
+
+
+/**
+ * Returns an instance of {@link goog.ui.Component} or a subclass suitable to
+ * decorate the given element, based on its CSS class.
+ * @param {Element} element Element to decorate.
+ * @return {goog.ui.Component?} Component to decorate the element (null if
+ *     none).
+ */
+goog.ui.registry.getDecorator = function(element) {
+  var decorator;
+  var classNames = goog.dom.classes.get(element);
+  for (var i = 0, len = classNames.length; i < len; i++) {
+    if ((decorator = goog.ui.registry.getDecoratorByClassName(classNames[i]))) {
+      return decorator;
+    }
+  }
+  return null;
+};
+
+
+/**
+ * Resets the global renderer and decorator registry.
+ */
+goog.ui.registry.reset = function() {
+  goog.ui.registry.defaultRenderers_ = {};
+  goog.ui.registry.decoratorFunctions_ = {};
+};
+
+
+/**
+ * Map of {@link goog.ui.Component} constructor unique IDs to the constructors
+ * of their default {@link goog.ui.Renderer}s.
+ * @type {Object}
+ * @private
+ */
+goog.ui.registry.defaultRenderers_ = {};
+
+
+/**
+ * Map of CSS class names to registry factory functions.  The keys are
+ * class names.  The values are function objects that return new instances
+ * of {@link goog.ui.registry} or one of its subclasses, suitable to
+ * decorate elements marked with the corresponding CSS class.  Used by
+ * containers while decorating their children.
+ * @type {Object}
+ * @private
+ */
+goog.ui.registry.decoratorFunctions_ = {};
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Provides a function that decorates an element based on its CSS
+ * class name.
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.decorate');
+
+goog.require('goog.ui.registry');
+
+
+/**
+ * Decorates the element with a suitable {@link goog.ui.Component} instance, if
+ * a matching decorator is found.
+ * @param {Element} element Element to decorate.
+ * @return {goog.ui.Component?} New component instance, decorating the element.
+ */
+goog.ui.decorate = function(element) {
+  var decorator = goog.ui.registry.getDecorator(element);
+  if (decorator) {
+    decorator.decorate(element);
+  }
+  return decorator;
+};
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Constant declarations for common key codes.
+ *
+ * @author eae@google.com (Emil A Eklund)
+ * @see ../demos/keyhandler.html
+ */
+
+goog.provide('goog.events.KeyCodes');
+
+goog.require('goog.userAgent');
+
+
+/**
+ * Key codes for common characters.
+ *
+ * This list is not localized and therefore some of the key codes are not
+ * correct for non US keyboard layouts. See comments below.
+ *
+ * @enum {number}
+ */
+goog.events.KeyCodes = {
+  WIN_KEY_FF_LINUX: 0,
+  MAC_ENTER: 3,
+  BACKSPACE: 8,
+  TAB: 9,
+  NUM_CENTER: 12,  // NUMLOCK on FF/Safari Mac
+  ENTER: 13,
+  SHIFT: 16,
+  CTRL: 17,
+  ALT: 18,
+  PAUSE: 19,
+  CAPS_LOCK: 20,
+  ESC: 27,
+  SPACE: 32,
+  PAGE_UP: 33,     // also NUM_NORTH_EAST
+  PAGE_DOWN: 34,   // also NUM_SOUTH_EAST
+  END: 35,         // also NUM_SOUTH_WEST
+  HOME: 36,        // also NUM_NORTH_WEST
+  LEFT: 37,        // also NUM_WEST
+  UP: 38,          // also NUM_NORTH
+  RIGHT: 39,       // also NUM_EAST
+  DOWN: 40,        // also NUM_SOUTH
+  PRINT_SCREEN: 44,
+  INSERT: 45,      // also NUM_INSERT
+  DELETE: 46,      // also NUM_DELETE
+  ZERO: 48,
+  ONE: 49,
+  TWO: 50,
+  THREE: 51,
+  FOUR: 52,
+  FIVE: 53,
+  SIX: 54,
+  SEVEN: 55,
+  EIGHT: 56,
+  NINE: 57,
+  FF_SEMICOLON: 59, // Firefox (Gecko) fires this for semicolon instead of 186
+  FF_EQUALS: 61, // Firefox (Gecko) fires this for equals instead of 187
+  QUESTION_MARK: 63, // needs localization
+  A: 65,
+  B: 66,
+  C: 67,
+  D: 68,
+  E: 69,
+  F: 70,
+  G: 71,
+  H: 72,
+  I: 73,
+  J: 74,
+  K: 75,
+  L: 76,
+  M: 77,
+  N: 78,
+  O: 79,
+  P: 80,
+  Q: 81,
+  R: 82,
+  S: 83,
+  T: 84,
+  U: 85,
+  V: 86,
+  W: 87,
+  X: 88,
+  Y: 89,
+  Z: 90,
+  META: 91, // WIN_KEY_LEFT
+  WIN_KEY_RIGHT: 92,
+  CONTEXT_MENU: 93,
+  NUM_ZERO: 96,
+  NUM_ONE: 97,
+  NUM_TWO: 98,
+  NUM_THREE: 99,
+  NUM_FOUR: 100,
+  NUM_FIVE: 101,
+  NUM_SIX: 102,
+  NUM_SEVEN: 103,
+  NUM_EIGHT: 104,
+  NUM_NINE: 105,
+  NUM_MULTIPLY: 106,
+  NUM_PLUS: 107,
+  NUM_MINUS: 109,
+  NUM_PERIOD: 110,
+  NUM_DIVISION: 111,
+  F1: 112,
+  F2: 113,
+  F3: 114,
+  F4: 115,
+  F5: 116,
+  F6: 117,
+  F7: 118,
+  F8: 119,
+  F9: 120,
+  F10: 121,
+  F11: 122,
+  F12: 123,
+  NUMLOCK: 144,
+  SCROLL_LOCK: 145,
+
+  // OS-specific media keys like volume controls and browser controls.
+  FIRST_MEDIA_KEY: 166,
+  LAST_MEDIA_KEY: 183,
+
+  SEMICOLON: 186,            // needs localization
+  DASH: 189,                 // needs localization
+  EQUALS: 187,               // needs localization
+  COMMA: 188,                // needs localization
+  PERIOD: 190,               // needs localization
+  SLASH: 191,                // needs localization
+  APOSTROPHE: 192,           // needs localization
+  TILDE: 192,                // needs localization
+  SINGLE_QUOTE: 222,         // needs localization
+  OPEN_SQUARE_BRACKET: 219,  // needs localization
+  BACKSLASH: 220,            // needs localization
+  CLOSE_SQUARE_BRACKET: 221, // needs localization
+  WIN_KEY: 224,
+  MAC_FF_META: 224, // Firefox (Gecko) fires this for the meta key instead of 91
+  WIN_IME: 229,
+
+  // We've seen users whose machines fire this keycode at regular one
+  // second intervals. The common thread among these users is that
+  // they're all using Dell Inspiron laptops, so we suspect that this
+  // indicates a hardware/bios problem.
+  // http://en.community.dell.com/support-forums/laptop/f/3518/p/19285957/19523128.aspx
+  PHANTOM: 255
+};
+
+
+/**
+ * Returns true if the event contains a text modifying key.
+ * @param {goog.events.BrowserEvent} e A key event.
+ * @return {boolean} Whether it's a text modifying key.
+ */
+goog.events.KeyCodes.isTextModifyingKeyEvent = function(e) {
+  if (e.altKey && !e.ctrlKey ||
+      e.metaKey ||
+      // Function keys don't generate text
+      e.keyCode >= goog.events.KeyCodes.F1 &&
+      e.keyCode <= goog.events.KeyCodes.F12) {
+    return false;
+  }
+
+  // The following keys are quite harmless, even in combination with
+  // CTRL, ALT or SHIFT.
+  switch (e.keyCode) {
+    case goog.events.KeyCodes.ALT:
+    case goog.events.KeyCodes.CAPS_LOCK:
+    case goog.events.KeyCodes.CONTEXT_MENU:
+    case goog.events.KeyCodes.CTRL:
+    case goog.events.KeyCodes.DOWN:
+    case goog.events.KeyCodes.END:
+    case goog.events.KeyCodes.ESC:
+    case goog.events.KeyCodes.HOME:
+    case goog.events.KeyCodes.INSERT:
+    case goog.events.KeyCodes.LEFT:
+    case goog.events.KeyCodes.MAC_FF_META:
+    case goog.events.KeyCodes.META:
+    case goog.events.KeyCodes.NUMLOCK:
+    case goog.events.KeyCodes.NUM_CENTER:
+    case goog.events.KeyCodes.PAGE_DOWN:
+    case goog.events.KeyCodes.PAGE_UP:
+    case goog.events.KeyCodes.PAUSE:
+    case goog.events.KeyCodes.PHANTOM:
+    case goog.events.KeyCodes.PRINT_SCREEN:
+    case goog.events.KeyCodes.RIGHT:
+    case goog.events.KeyCodes.SCROLL_LOCK:
+    case goog.events.KeyCodes.SHIFT:
+    case goog.events.KeyCodes.UP:
+    case goog.events.KeyCodes.WIN_KEY:
+    case goog.events.KeyCodes.WIN_KEY_RIGHT:
+      return false;
+    case goog.events.KeyCodes.WIN_KEY_FF_LINUX:
+      return !goog.userAgent.GECKO;
+    default:
+      return e.keyCode < goog.events.KeyCodes.FIRST_MEDIA_KEY ||
+          e.keyCode > goog.events.KeyCodes.LAST_MEDIA_KEY;
+  }
+};
+
+
+/**
+ * Returns true if the key fires a keypress event in the current browser.
+ *
+ * Accoridng to MSDN [1] IE only fires keypress events for the following keys:
+ * - Letters: A - Z (uppercase and lowercase)
+ * - Numerals: 0 - 9
+ * - Symbols: ! @ # $ % ^ & * ( ) _ - + = < [ ] { } , . / ? \ | ' ` " ~
+ * - System: ESC, SPACEBAR, ENTER
+ *
+ * That's not entirely correct though, for instance there's no distinction
+ * between upper and lower case letters.
+ *
+ * [1] http://msdn2.microsoft.com/en-us/library/ms536939(VS.85).aspx)
+ *
+ * Safari is similar to IE, but does not fire keypress for ESC.
+ *
+ * Additionally, IE6 does not fire keydown or keypress events for letters when
+ * the control or alt keys are held down and the shift key is not. IE7 does
+ * fire keydown in these cases, though, but not keypress.
+ *
+ * @param {number} keyCode A key code.
+ * @param {number=} opt_heldKeyCode Key code of a currently-held key.
+ * @param {boolean=} opt_shiftKey Whether the shift key is held down.
+ * @param {boolean=} opt_ctrlKey Whether the control key is held down.
+ * @param {boolean=} opt_altKey Whether the alt key is held down.
+ * @return {boolean} Whether it's a key that fires a keypress event.
+ */
+goog.events.KeyCodes.firesKeyPressEvent = function(keyCode, opt_heldKeyCode,
+    opt_shiftKey, opt_ctrlKey, opt_altKey) {
+  if (!goog.userAgent.IE &&
+      !(goog.userAgent.WEBKIT && goog.userAgent.isVersion('525'))) {
+    return true;
+  }
+
+  if (goog.userAgent.MAC && opt_altKey) {
+    return goog.events.KeyCodes.isCharacterKey(keyCode);
+  }
+
+  // Alt but not AltGr which is represented as Alt+Ctrl.
+  if (opt_altKey && !opt_ctrlKey) {
+    return false;
+  }
+
+  // Saves Ctrl or Alt + key for IE and WebKit 525+, which won't fire keypress.
+  // Non-IE browsers and WebKit prior to 525 won't get this far so no need to
+  // check the user agent.
+  if (!opt_shiftKey &&
+      (opt_heldKeyCode == goog.events.KeyCodes.CTRL ||
+       opt_heldKeyCode == goog.events.KeyCodes.ALT)) {
+    return false;
+  }
+
+  // When Ctrl+<somekey> is held in IE, it only fires a keypress once, but it
+  // continues to fire keydown events as the event repeats.
+  if (goog.userAgent.IE && opt_ctrlKey && opt_heldKeyCode == keyCode) {
+    return false;
+  }
+
+  switch (keyCode) {
+    case goog.events.KeyCodes.ENTER:
+      // IE9 does not fire KEYPRESS on ENTER.
+      return !(goog.userAgent.IE && goog.userAgent.isDocumentMode(9));
+    case goog.events.KeyCodes.ESC:
+      return !goog.userAgent.WEBKIT;
+  }
+
+  return goog.events.KeyCodes.isCharacterKey(keyCode);
+};
+
+
+/**
+ * Returns true if the key produces a character.
+ * This does not cover characters on non-US keyboards (Russian, Hebrew, etc.).
+ *
+ * @param {number} keyCode A key code.
+ * @return {boolean} Whether it's a character key.
+ */
+goog.events.KeyCodes.isCharacterKey = function(keyCode) {
+  if (keyCode >= goog.events.KeyCodes.ZERO &&
+      keyCode <= goog.events.KeyCodes.NINE) {
+    return true;
+  }
+
+  if (keyCode >= goog.events.KeyCodes.NUM_ZERO &&
+      keyCode <= goog.events.KeyCodes.NUM_MULTIPLY) {
+    return true;
+  }
+
+  if (keyCode >= goog.events.KeyCodes.A &&
+      keyCode <= goog.events.KeyCodes.Z) {
+    return true;
+  }
+
+  // Safari sends zero key code for non-latin characters.
+  if (goog.userAgent.WEBKIT && keyCode == 0) {
+    return true;
+  }
+
+  switch (keyCode) {
+    case goog.events.KeyCodes.SPACE:
+    case goog.events.KeyCodes.QUESTION_MARK:
+    case goog.events.KeyCodes.NUM_PLUS:
+    case goog.events.KeyCodes.NUM_MINUS:
+    case goog.events.KeyCodes.NUM_PERIOD:
+    case goog.events.KeyCodes.NUM_DIVISION:
+    case goog.events.KeyCodes.SEMICOLON:
+    case goog.events.KeyCodes.FF_SEMICOLON:
+    case goog.events.KeyCodes.DASH:
+    case goog.events.KeyCodes.EQUALS:
+    case goog.events.KeyCodes.FF_EQUALS:
+    case goog.events.KeyCodes.COMMA:
+    case goog.events.KeyCodes.PERIOD:
+    case goog.events.KeyCodes.SLASH:
+    case goog.events.KeyCodes.APOSTROPHE:
+    case goog.events.KeyCodes.SINGLE_QUOTE:
+    case goog.events.KeyCodes.OPEN_SQUARE_BRACKET:
+    case goog.events.KeyCodes.BACKSLASH:
+    case goog.events.KeyCodes.CLOSE_SQUARE_BRACKET:
+      return true;
+    default:
+      return false;
+  }
+};
+
+
+/**
+ * Normalizes key codes from their Gecko-specific value to the general one.
+ * @param {number} keyCode The native key code.
+ * @return {number} The normalized key code.
+ */
+goog.events.KeyCodes.normalizeGeckoKeyCode = function(keyCode) {
+  switch (keyCode) {
+    case goog.events.KeyCodes.FF_EQUALS:
+      return goog.events.KeyCodes.EQUALS;
+    case goog.events.KeyCodes.FF_SEMICOLON:
+      return goog.events.KeyCodes.SEMICOLON;
+    case goog.events.KeyCodes.MAC_FF_META:
+      return goog.events.KeyCodes.META;
+    case goog.events.KeyCodes.WIN_KEY_FF_LINUX:
+      return goog.events.KeyCodes.WIN_KEY;
+    default:
+      return keyCode;
+  }
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview This file contains a class for working with keyboard events
+ * that repeat consistently across browsers and platforms. It also unifies the
+ * key code so that it is the same in all browsers and platforms.
+ *
+ * Different web browsers have very different keyboard event handling. Most
+ * importantly is that only certain browsers repeat keydown events:
+ * IE, Opera, FF/Win32, and Safari 3 repeat keydown events.
+ * FF/Mac and Safari 2 do not.
+ *
+ * For the purposes of this code, "Safari 3" means WebKit 525+, when WebKit
+ * decided that they should try to match IE's key handling behavior.
+ * Safari 3.0.4, which shipped with Leopard (WebKit 523), has the
+ * Safari 2 behavior.
+ *
+ * Firefox, Safari, Opera prevent on keypress
+ *
+ * IE prevents on keydown
+ *
+ * Firefox does not fire keypress for shift, ctrl, alt
+ * Firefox does fire keydown for shift, ctrl, alt, meta
+ * Firefox does not repeat keydown for shift, ctrl, alt, meta
+ *
+ * Firefox does not fire keypress for up and down in an input
+ *
+ * Opera fires keypress for shift, ctrl, alt, meta
+ * Opera does not repeat keypress for shift, ctrl, alt, meta
+ *
+ * Safari 2 and 3 do not fire keypress for shift, ctrl, alt
+ * Safari 2 does not fire keydown for shift, ctrl, alt
+ * Safari 3 *does* fire keydown for shift, ctrl, alt
+ *
+ * IE provides the keycode for keyup/down events and the charcode (in the
+ * keycode field) for keypress.
+ *
+ * Mozilla provides the keycode for keyup/down and the charcode for keypress
+ * unless it's a non text modifying key in which case the keycode is provided.
+ *
+ * Safari 3 provides the keycode and charcode for all events.
+ *
+ * Opera provides the keycode for keyup/down event and either the charcode or
+ * the keycode (in the keycode field) for keypress events.
+ *
+ * Firefox x11 doesn't fire keydown events if a another key is already held down
+ * until the first key is released. This can cause a key event to be fired with
+ * a keyCode for the first key and a charCode for the second key.
+ *
+ * Safari in keypress
+ *
+ *        charCode keyCode which
+ * ENTER:       13      13    13
+ * F1:       63236   63236 63236
+ * F8:       63243   63243 63243
+ * ...
+ * p:          112     112   112
+ * P:           80      80    80
+ *
+ * Firefox, keypress:
+ *
+ *        charCode keyCode which
+ * ENTER:        0      13    13
+ * F1:           0     112     0
+ * F8:           0     119     0
+ * ...
+ * p:          112       0   112
+ * P:           80       0    80
+ *
+ * Opera, Mac+Win32, keypress:
+ *
+ *         charCode keyCode which
+ * ENTER: undefined      13    13
+ * F1:    undefined     112     0
+ * F8:    undefined     119     0
+ * ...
+ * p:     undefined     112   112
+ * P:     undefined      80    80
+ *
+ * IE7, keydown
+ *
+ *         charCode keyCode     which
+ * ENTER: undefined      13 undefined
+ * F1:    undefined     112 undefined
+ * F8:    undefined     119 undefined
+ * ...
+ * p:     undefined      80 undefined
+ * P:     undefined      80 undefined
+ *
+ * @author arv@google.com (Erik Arvidsson)
+ * @author eae@google.com (Emil A Eklund)
+ * @see ../demos/keyhandler.html
+ */
+
+goog.provide('goog.events.KeyEvent');
+goog.provide('goog.events.KeyHandler');
+goog.provide('goog.events.KeyHandler.EventType');
+
+goog.require('goog.events');
+goog.require('goog.events.BrowserEvent');
+goog.require('goog.events.EventTarget');
+goog.require('goog.events.EventType');
+goog.require('goog.events.KeyCodes');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * A wrapper around an element that you want to listen to keyboard events on.
+ * @param {Element|Document=} opt_element The element or document to listen on.
+ * @param {boolean=} opt_capture Whether to listen for browser events in
+ *     capture phase (defaults to false).
+ * @constructor
+ * @extends {goog.events.EventTarget}
+ */
+goog.events.KeyHandler = function(opt_element, opt_capture) {
+  goog.events.EventTarget.call(this);
+
+  if (opt_element) {
+    this.attach(opt_element, opt_capture);
+  }
+};
+goog.inherits(goog.events.KeyHandler, goog.events.EventTarget);
+
+
+/**
+ * This is the element that we will listen to the real keyboard events on.
+ * @type {Element|Document|null}
+ * @private
+ */
+goog.events.KeyHandler.prototype.element_ = null;
+
+
+/**
+ * The key for the key press listener.
+ * @type {?number}
+ * @private
+ */
+goog.events.KeyHandler.prototype.keyPressKey_ = null;
+
+
+/**
+ * The key for the key down listener.
+ * @type {?number}
+ * @private
+ */
+goog.events.KeyHandler.prototype.keyDownKey_ = null;
+
+
+/**
+ * The key for the key up listener.
+ * @type {?number}
+ * @private
+ */
+goog.events.KeyHandler.prototype.keyUpKey_ = null;
+
+
+/**
+ * Used to detect keyboard repeat events.
+ * @private
+ * @type {number}
+ */
+goog.events.KeyHandler.prototype.lastKey_ = -1;
+
+
+/**
+ * Keycode recorded for key down events. As most browsers don't report the
+ * keycode in the key press event we need to record it in the key down phase.
+ * @private
+ * @type {number}
+ */
+goog.events.KeyHandler.prototype.keyCode_ = -1;
+
+
+/**
+ * Enum type for the events fired by the key handler
+ * @enum {string}
+ */
+goog.events.KeyHandler.EventType = {
+  KEY: 'key'
+};
+
+
+/**
+ * An enumeration of key codes that Safari 2 does incorrectly
+ * @type {Object}
+ * @private
+ */
+goog.events.KeyHandler.safariKey_ = {
+  '3': goog.events.KeyCodes.ENTER, // 13
+  '12': goog.events.KeyCodes.NUMLOCK, // 144
+  '63232': goog.events.KeyCodes.UP, // 38
+  '63233': goog.events.KeyCodes.DOWN, // 40
+  '63234': goog.events.KeyCodes.LEFT, // 37
+  '63235': goog.events.KeyCodes.RIGHT, // 39
+  '63236': goog.events.KeyCodes.F1, // 112
+  '63237': goog.events.KeyCodes.F2, // 113
+  '63238': goog.events.KeyCodes.F3, // 114
+  '63239': goog.events.KeyCodes.F4, // 115
+  '63240': goog.events.KeyCodes.F5, // 116
+  '63241': goog.events.KeyCodes.F6, // 117
+  '63242': goog.events.KeyCodes.F7, // 118
+  '63243': goog.events.KeyCodes.F8, // 119
+  '63244': goog.events.KeyCodes.F9, // 120
+  '63245': goog.events.KeyCodes.F10, // 121
+  '63246': goog.events.KeyCodes.F11, // 122
+  '63247': goog.events.KeyCodes.F12, // 123
+  '63248': goog.events.KeyCodes.PRINT_SCREEN, // 44
+  '63272': goog.events.KeyCodes.DELETE, // 46
+  '63273': goog.events.KeyCodes.HOME, // 36
+  '63275': goog.events.KeyCodes.END, // 35
+  '63276': goog.events.KeyCodes.PAGE_UP, // 33
+  '63277': goog.events.KeyCodes.PAGE_DOWN, // 34
+  '63289': goog.events.KeyCodes.NUMLOCK, // 144
+  '63302': goog.events.KeyCodes.INSERT // 45
+};
+
+
+/**
+ * An enumeration of key identifiers currently part of the W3C draft for DOM3
+ * and their mappings to keyCodes.
+ * http://www.w3.org/TR/DOM-Level-3-Events/keyset.html#KeySet-Set
+ * This is currently supported in Safari and should be platform independent.
+ * @type {Object}
+ * @private
+ */
+goog.events.KeyHandler.keyIdentifier_ = {
+  'Up': goog.events.KeyCodes.UP, // 38
+  'Down': goog.events.KeyCodes.DOWN, // 40
+  'Left': goog.events.KeyCodes.LEFT, // 37
+  'Right': goog.events.KeyCodes.RIGHT, // 39
+  'Enter': goog.events.KeyCodes.ENTER, // 13
+  'F1': goog.events.KeyCodes.F1, // 112
+  'F2': goog.events.KeyCodes.F2, // 113
+  'F3': goog.events.KeyCodes.F3, // 114
+  'F4': goog.events.KeyCodes.F4, // 115
+  'F5': goog.events.KeyCodes.F5, // 116
+  'F6': goog.events.KeyCodes.F6, // 117
+  'F7': goog.events.KeyCodes.F7, // 118
+  'F8': goog.events.KeyCodes.F8, // 119
+  'F9': goog.events.KeyCodes.F9, // 120
+  'F10': goog.events.KeyCodes.F10, // 121
+  'F11': goog.events.KeyCodes.F11, // 122
+  'F12': goog.events.KeyCodes.F12, // 123
+  'U+007F': goog.events.KeyCodes.DELETE, // 46
+  'Home': goog.events.KeyCodes.HOME, // 36
+  'End': goog.events.KeyCodes.END, // 35
+  'PageUp': goog.events.KeyCodes.PAGE_UP, // 33
+  'PageDown': goog.events.KeyCodes.PAGE_DOWN, // 34
+  'Insert': goog.events.KeyCodes.INSERT // 45
+};
+
+
+/**
+ * If true, the KeyEvent fires on keydown. Otherwise, it fires on keypress.
+ *
+ * @type {boolean}
+ * @private
+ */
+goog.events.KeyHandler.USES_KEYDOWN_ = goog.userAgent.IE ||
+    goog.userAgent.WEBKIT && goog.userAgent.isVersion('525');
+
+
+/**
+ * Records the keycode for browsers that only returns the keycode for key up/
+ * down events. For browser/key combinations that doesn't trigger a key pressed
+ * event it also fires the patched key event.
+ * @param {goog.events.BrowserEvent} e The key down event.
+ * @private
+ */
+goog.events.KeyHandler.prototype.handleKeyDown_ = function(e) {
+
+  // Ctrl-Tab and Alt-Tab can cause the focus to be moved to another window
+  // before we've caught a key-up event.  If the last-key was one of these we
+  // reset the state.
+  if (goog.userAgent.WEBKIT &&
+      (this.lastKey_ == goog.events.KeyCodes.CTRL && !e.ctrlKey ||
+       this.lastKey_ == goog.events.KeyCodes.ALT && !e.altKey)) {
+    this.lastKey_ = -1;
+    this.keyCode_ = -1;
+  }
+
+  if (goog.events.KeyHandler.USES_KEYDOWN_ &&
+      !goog.events.KeyCodes.firesKeyPressEvent(e.keyCode,
+          this.lastKey_, e.shiftKey, e.ctrlKey, e.altKey)) {
+    this.handleEvent(e);
+  } else {
+    this.keyCode_ = goog.userAgent.GECKO ?
+        goog.events.KeyCodes.normalizeGeckoKeyCode(e.keyCode) :
+        e.keyCode;
+  }
+};
+
+
+/**
+ * Clears the stored previous key value, resetting the key repeat status. Uses
+ * -1 because the Safari 3 Windows beta reports 0 for certain keys (like Home
+ * and End.)
+ * @param {goog.events.BrowserEvent} e The keyup event.
+ * @private
+ */
+goog.events.KeyHandler.prototype.handleKeyup_ = function(e) {
+  this.lastKey_ = -1;
+  this.keyCode_ = -1;
+};
+
+
+/**
+ * Handles the events on the element.
+ * @param {goog.events.BrowserEvent} e  The keyboard event sent from the
+ *     browser.
+ */
+goog.events.KeyHandler.prototype.handleEvent = function(e) {
+  var be = e.getBrowserEvent();
+  var keyCode, charCode;
+
+  // IE reports the character code in the keyCode field for keypress events.
+  // There are two exceptions however, Enter and Escape.
+  if (goog.userAgent.IE && e.type == goog.events.EventType.KEYPRESS) {
+    keyCode = this.keyCode_;
+    charCode = keyCode != goog.events.KeyCodes.ENTER &&
+        keyCode != goog.events.KeyCodes.ESC ?
+            be.keyCode : 0;
+
+  // Safari reports the character code in the keyCode field for keypress
+  // events but also has a charCode field.
+  } else if (goog.userAgent.WEBKIT &&
+      e.type == goog.events.EventType.KEYPRESS) {
+    keyCode = this.keyCode_;
+    charCode = be.charCode >= 0 && be.charCode < 63232 &&
+        goog.events.KeyCodes.isCharacterKey(keyCode) ?
+            be.charCode : 0;
+
+  // Opera reports the keycode or the character code in the keyCode field.
+  } else if (goog.userAgent.OPERA) {
+    keyCode = this.keyCode_;
+    charCode = goog.events.KeyCodes.isCharacterKey(keyCode) ?
+        be.keyCode : 0;
+
+  // Mozilla reports the character code in the charCode field.
+  } else {
+    keyCode = be.keyCode || this.keyCode_;
+    charCode = be.charCode || 0;
+    // On the Mac, shift-/ triggers a question mark char code and no key code
+    // (normalized to WIN_KEY), so we synthesize the latter.
+    if (goog.userAgent.MAC &&
+        charCode == goog.events.KeyCodes.QUESTION_MARK &&
+        keyCode == goog.events.KeyCodes.WIN_KEY) {
+      keyCode = goog.events.KeyCodes.SLASH;
+    }
+  }
+
+  var key = keyCode;
+  var keyIdentifier = be.keyIdentifier;
+
+  // Correct the key value for certain browser-specific quirks.
+  if (keyCode) {
+    if (keyCode >= 63232 && keyCode in goog.events.KeyHandler.safariKey_) {
+      // NOTE(nicksantos): Safari 3 has fixed this problem,
+      // this is only needed for Safari 2.
+      key = goog.events.KeyHandler.safariKey_[keyCode];
+    } else {
+
+      // Safari returns 25 for Shift+Tab instead of 9.
+      if (keyCode == 25 && e.shiftKey) {
+        key = 9;
+      }
+    }
+  } else if (keyIdentifier &&
+             keyIdentifier in goog.events.KeyHandler.keyIdentifier_) {
+    // This is needed for Safari Windows because it currently doesn't give a
+    // keyCode/which for non printable keys.
+    key = goog.events.KeyHandler.keyIdentifier_[keyIdentifier];
+  }
+
+  // If we get the same keycode as a keydown/keypress without having seen a
+  // keyup event, then this event was caused by key repeat.
+  var repeat = key == this.lastKey_;
+  this.lastKey_ = key;
+
+  var event = new goog.events.KeyEvent(key, charCode, repeat, be);
+  this.dispatchEvent(event);
+};
+
+
+/**
+ * Returns the element listened on for the real keyboard events.
+ * @return {Element|Document|null} The element listened on for the real
+ *     keyboard events.
+ */
+goog.events.KeyHandler.prototype.getElement = function() {
+  return this.element_;
+};
+
+
+/**
+ * Adds the proper key event listeners to the element.
+ * @param {Element|Document} element The element to listen on.
+ * @param {boolean=} opt_capture Whether to listen for browser events in
+ *     capture phase (defaults to false).
+ */
+goog.events.KeyHandler.prototype.attach = function(element, opt_capture) {
+  if (this.keyUpKey_) {
+    this.detach();
+  }
+
+  this.element_ = element;
+
+  this.keyPressKey_ = goog.events.listen(this.element_,
+                                         goog.events.EventType.KEYPRESS,
+                                         this,
+                                         opt_capture);
+
+  // Most browsers (Safari 2 being the notable exception) doesn't include the
+  // keyCode in keypress events (IE has the char code in the keyCode field and
+  // Mozilla only included the keyCode if there's no charCode). Thus we have to
+  // listen for keydown to capture the keycode.
+  this.keyDownKey_ = goog.events.listen(this.element_,
+                                        goog.events.EventType.KEYDOWN,
+                                        this.handleKeyDown_,
+                                        opt_capture,
+                                        this);
+
+
+  this.keyUpKey_ = goog.events.listen(this.element_,
+                                      goog.events.EventType.KEYUP,
+                                      this.handleKeyup_,
+                                      opt_capture,
+                                      this);
+};
+
+
+/**
+ * Removes the listeners that may exist.
+ */
+goog.events.KeyHandler.prototype.detach = function() {
+  if (this.keyPressKey_) {
+    goog.events.unlistenByKey(this.keyPressKey_);
+    goog.events.unlistenByKey(this.keyDownKey_);
+    goog.events.unlistenByKey(this.keyUpKey_);
+    this.keyPressKey_ = null;
+    this.keyDownKey_ = null;
+    this.keyUpKey_ = null;
+  }
+  this.element_ = null;
+  this.lastKey_ = -1;
+  this.keyCode_ = -1;
+};
+
+
+/** @override */
+goog.events.KeyHandler.prototype.disposeInternal = function() {
+  goog.events.KeyHandler.superClass_.disposeInternal.call(this);
+  this.detach();
+};
+
+
+
+/**
+ * This class is used for the goog.events.KeyHandler.EventType.KEY event and
+ * it overrides the key code with the fixed key code.
+ * @param {number} keyCode The adjusted key code.
+ * @param {number} charCode The unicode character code.
+ * @param {boolean} repeat Whether this event was generated by keyboard repeat.
+ * @param {Event} browserEvent Browser event object.
+ * @constructor
+ * @extends {goog.events.BrowserEvent}
+ */
+goog.events.KeyEvent = function(keyCode, charCode, repeat, browserEvent) {
+  goog.events.BrowserEvent.call(this, browserEvent);
+  this.type = goog.events.KeyHandler.EventType.KEY;
+
+  /**
+   * Keycode of key press.
+   * @type {number}
+   */
+  this.keyCode = keyCode;
+
+  /**
+   * Unicode character code.
+   * @type {number}
+   */
+  this.charCode = charCode;
+
+  /**
+   * True if this event was generated by keyboard auto-repeat (i.e., the user is
+   * holding the key down.)
+   * @type {boolean}
+   */
+  this.repeat = repeat;
+};
+goog.inherits(goog.events.KeyEvent, goog.events.BrowserEvent);
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Base class for UI controls such as buttons, menus, menu items,
+ * toolbar buttons, etc.  The implementation is based on a generalized version
+ * of {@link goog.ui.MenuItem}.
+ * TODO(attila):  If the renderer framework works well, pull it into Component.
+ *
+ * @author attila@google.com (Attila Bodis)
+ * @see ../demos/control.html
+ * @see http://code.google.com/p/closure-library/wiki/IntroToControls
+ */
+
+goog.provide('goog.ui.Control');
+
+goog.require('goog.array');
+goog.require('goog.dom');
+goog.require('goog.events.BrowserEvent.MouseButton');
+goog.require('goog.events.Event');
+goog.require('goog.events.EventType');
+goog.require('goog.events.KeyCodes');
+goog.require('goog.events.KeyHandler');
+goog.require('goog.events.KeyHandler.EventType');
+goog.require('goog.string');
+goog.require('goog.ui.Component');
+goog.require('goog.ui.Component.Error');
+goog.require('goog.ui.Component.EventType');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.ControlContent');
+goog.require('goog.ui.ControlRenderer');
+goog.require('goog.ui.decorate');
+goog.require('goog.ui.registry');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * Base class for UI controls.  Extends {@link goog.ui.Component} by adding
+ * the following:
+ *  <ul>
+ *    <li>a {@link goog.events.KeyHandler}, to simplify keyboard handling,
+ *    <li>a pluggable <em>renderer</em> framework, to simplify the creation of
+ *        simple controls without the need to subclass this class,
+ *    <li>the notion of component <em>content</em>, like a text caption or DOM
+ *        structure displayed in the component (e.g. a button label),
+ *    <li>getter and setter for component content, as well as a getter and
+ *        setter specifically for caption text (for convenience),
+ *    <li>support for hiding/showing the component,
+      <li>fine-grained control over supported states and state transition
+          events, and
+ *    <li>default mouse and keyboard event handling.
+ *  </ul>
+ * This class has sufficient built-in functionality for most simple UI controls.
+ * All controls dispatch SHOW, HIDE, ENTER, LEAVE, and ACTION events on show,
+ * hide, mouseover, mouseout, and user action, respectively.  Additional states
+ * are also supported.  See closure/demos/control.html
+ * for example usage.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure
+ *     to display as the content of the component (if any).
+ * @param {goog.ui.ControlRenderer=} opt_renderer Renderer used to render or
+ *     decorate the component; defaults to {@link goog.ui.ControlRenderer}.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper, used for
+ *     document interaction.
+ * @constructor
+ * @extends {goog.ui.Component}
+ */
+goog.ui.Control = function(content, opt_renderer, opt_domHelper) {
+  goog.ui.Component.call(this, opt_domHelper);
+  this.renderer_ = opt_renderer ||
+      goog.ui.registry.getDefaultRenderer(this.constructor);
+  this.setContentInternal(content);
+};
+goog.inherits(goog.ui.Control, goog.ui.Component);
+
+
+// Renderer registry.
+// TODO(attila): Refactor existing usages inside Google in a follow-up CL.
+
+
+/**
+ * Maps a CSS class name to a function that returns a new instance of
+ * {@link goog.ui.Control} or a subclass thereof, suitable to decorate
+ * an element that has the specified CSS class.  UI components that extend
+ * {@link goog.ui.Control} and want {@link goog.ui.Container}s to be able
+ * to discover and decorate elements using them should register a factory
+ * function via this API.
+ * @param {string} className CSS class name.
+ * @param {Function} decoratorFunction Function that takes no arguments and
+ *     returns a new instance of a control to decorate an element with the
+ *     given class.
+ * @deprecated Use {@link goog.ui.registry.setDecoratorByClassName} instead.
+ */
+goog.ui.Control.registerDecorator = goog.ui.registry.setDecoratorByClassName;
+
+
+/**
+ * Takes an element and returns a new instance of {@link goog.ui.Control}
+ * or a subclass, suitable to decorate it (based on the element's CSS class).
+ * @param {Element} element Element to decorate.
+ * @return {goog.ui.Control?} New control instance to decorate the element
+ *     (null if none).
+ * @deprecated Use {@link goog.ui.registry.getDecorator} instead.
+ */
+goog.ui.Control.getDecorator =
+    /** @type {function(Element): goog.ui.Control} */ (
+        goog.ui.registry.getDecorator);
+
+
+/**
+ * Takes an element, and decorates it with a {@link goog.ui.Control} instance
+ * if a suitable decorator is found.
+ * @param {Element} element Element to decorate.
+ * @return {goog.ui.Control?} New control instance that decorates the element
+ *     (null if none).
+ * @deprecated Use {@link goog.ui.decorate} instead.
+ */
+goog.ui.Control.decorate = /** @type {function(Element): goog.ui.Control} */ (
+    goog.ui.decorate);
+
+
+/**
+ * Renderer associated with the component.
+ * @type {goog.ui.ControlRenderer|undefined}
+ * @private
+ */
+goog.ui.Control.prototype.renderer_;
+
+
+/**
+ * Text caption or DOM structure displayed in the component.
+ * @type {goog.ui.ControlContent}
+ * @private
+ */
+goog.ui.Control.prototype.content_ = null;
+
+
+/**
+ * Current component state; a bit mask of {@link goog.ui.Component.State}s.
+ * @type {number}
+ * @private
+ */
+goog.ui.Control.prototype.state_ = 0x00;
+
+
+/**
+ * A bit mask of {@link goog.ui.Component.State}s this component supports.
+ * @type {number}
+ * @private
+ */
+goog.ui.Control.prototype.supportedStates_ =
+    goog.ui.Component.State.DISABLED |
+    goog.ui.Component.State.HOVER |
+    goog.ui.Component.State.ACTIVE |
+    goog.ui.Component.State.FOCUSED;
+
+
+/**
+ * A bit mask of {@link goog.ui.Component.State}s for which this component
+ * provides default event handling.  For example, a component that handles
+ * the HOVER state automatically will highlight itself on mouseover, whereas
+ * a component that doesn't handle HOVER automatically will only dispatch
+ * ENTER and LEAVE events but not call {@link setHighlighted} on itself.
+ * By default, components provide default event handling for all states.
+ * Controls hosted in containers (e.g. menu items in a menu, or buttons in a
+ * toolbar) will typically want to have their container manage their highlight
+ * state.  Selectable controls managed by a selection model will also typically
+ * want their selection state to be managed by the model.
+ * @type {number}
+ * @private
+ */
+goog.ui.Control.prototype.autoStates_ = goog.ui.Component.State.ALL;
+
+
+/**
+ * A bit mask of {@link goog.ui.Component.State}s for which this component
+ * dispatches state transition events.  Because events are expensive, the
+ * default behavior is to not dispatch any state transition events at all.
+ * Use the {@link #setDispatchTransitionEvents} API to request transition
+ * events  as needed.  Subclasses may enable transition events by default.
+ * Controls hosted in containers or managed by a selection model will typically
+ * want to dispatch transition events.
+ * @type {number}
+ * @private
+ */
+goog.ui.Control.prototype.statesWithTransitionEvents_ = 0x00;
+
+
+/**
+ * Component visibility.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Control.prototype.visible_ = true;
+
+
+/**
+ * Keyboard event handler.
+ * @type {goog.events.KeyHandler}
+ * @private
+ */
+goog.ui.Control.prototype.keyHandler_;
+
+
+/**
+ * Additional class name(s) to apply to the control's root element, if any.
+ * @type {Array.<string>?}
+ * @private
+ */
+goog.ui.Control.prototype.extraClassNames_ = null;
+
+
+/**
+ * Whether the control should listen for and handle mouse events; defaults to
+ * true.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Control.prototype.handleMouseEvents_ = true;
+
+
+/**
+ * Whether the control allows text selection within its DOM.  Defaults to false.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Control.prototype.allowTextSelection_ = false;
+
+
+/**
+ * The control's preferred ARIA role.
+ * @type {?goog.dom.a11y.Role}
+ * @private
+ */
+goog.ui.Control.prototype.preferredAriaRole_ = null;
+
+
+// Event handler and renderer management.
+
+
+/**
+ * Returns true if the control is configured to handle its own mouse events,
+ * false otherwise.  Controls not hosted in {@link goog.ui.Container}s have
+ * to handle their own mouse events, but controls hosted in containers may
+ * allow their parent to handle mouse events on their behalf.  Considered
+ * protected; should only be used within this package and by subclasses.
+ * @return {boolean} Whether the control handles its own mouse events.
+ */
+goog.ui.Control.prototype.isHandleMouseEvents = function() {
+  return this.handleMouseEvents_;
+};
+
+
+/**
+ * Enables or disables mouse event handling for the control.  Containers may
+ * use this method to disable mouse event handling in their child controls.
+ * Considered protected; should only be used within this package and by
+ * subclasses.
+ * @param {boolean} enable Whether to enable or disable mouse event handling.
+ */
+goog.ui.Control.prototype.setHandleMouseEvents = function(enable) {
+  if (this.isInDocument() && enable != this.handleMouseEvents_) {
+    // Already in the document; need to update event handler.
+    this.enableMouseEventHandling_(enable);
+  }
+  this.handleMouseEvents_ = enable;
+};
+
+
+/**
+ * Returns the DOM element on which the control is listening for keyboard
+ * events (null if none).
+ * @return {Element} Element on which the control is listening for key
+ *     events.
+ */
+goog.ui.Control.prototype.getKeyEventTarget = function() {
+  // Delegate to renderer.
+  return this.renderer_.getKeyEventTarget(this);
+};
+
+
+/**
+ * Returns the keyboard event handler for this component, lazily created the
+ * first time this method is called.  Considered protected; should only be
+ * used within this package and by subclasses.
+ * @return {goog.events.KeyHandler} Keyboard event handler for this component.
+ * @protected
+ */
+goog.ui.Control.prototype.getKeyHandler = function() {
+  return this.keyHandler_ || (this.keyHandler_ = new goog.events.KeyHandler());
+};
+
+
+/**
+ * Returns the renderer used by this component to render itself or to decorate
+ * an existing element.
+ * @return {goog.ui.ControlRenderer|undefined} Renderer used by the component
+ *     (undefined if none).
+ */
+goog.ui.Control.prototype.getRenderer = function() {
+  return this.renderer_;
+};
+
+
+/**
+ * Registers the given renderer with the component.  Changing renderers after
+ * the component has entered the document is an error.
+ * @param {goog.ui.ControlRenderer} renderer Renderer used by the component.
+ * @throws {Error} If the control is already in the document.
+ */
+goog.ui.Control.prototype.setRenderer = function(renderer) {
+  if (this.isInDocument()) {
+    // Too late.
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+
+  if (this.getElement()) {
+    // The component has already been rendered, but isn't yet in the document.
+    // Replace the renderer and delete the current DOM, so it can be re-rendered
+    // using the new renderer the next time someone calls render().
+    this.setElementInternal(null);
+  }
+
+  this.renderer_ = renderer;
+};
+
+
+// Support for additional styling.
+
+
+/**
+ * Returns any additional class name(s) to be applied to the component's
+ * root element, or null if no extra class names are needed.
+ * @return {Array.<string>?} Additional class names to be applied to
+ *     the component's root element (null if none).
+ */
+goog.ui.Control.prototype.getExtraClassNames = function() {
+  return this.extraClassNames_;
+};
+
+
+/**
+ * Adds the given class name to the list of classes to be applied to the
+ * component's root element.
+ * @param {string} className Additional class name to be applied to the
+ *     component's root element.
+ */
+goog.ui.Control.prototype.addClassName = function(className) {
+  if (className) {
+    if (this.extraClassNames_) {
+      if (!goog.array.contains(this.extraClassNames_, className)) {
+        this.extraClassNames_.push(className);
+      }
+    } else {
+      this.extraClassNames_ = [className];
+    }
+    this.renderer_.enableExtraClassName(this, className, true);
+  }
+};
+
+
+/**
+ * Removes the given class name from the list of classes to be applied to
+ * the component's root element.
+ * @param {string} className Class name to be removed from the component's root
+ *     element.
+ */
+goog.ui.Control.prototype.removeClassName = function(className) {
+  if (className && this.extraClassNames_) {
+    goog.array.remove(this.extraClassNames_, className);
+    if (this.extraClassNames_.length == 0) {
+      this.extraClassNames_ = null;
+    }
+    this.renderer_.enableExtraClassName(this, className, false);
+  }
+};
+
+
+/**
+ * Adds or removes the given class name to/from the list of classes to be
+ * applied to the component's root element.
+ * @param {string} className CSS class name to add or remove.
+ * @param {boolean} enable Whether to add or remove the class name.
+ */
+goog.ui.Control.prototype.enableClassName = function(className, enable) {
+  if (enable) {
+    this.addClassName(className);
+  } else {
+    this.removeClassName(className);
+  }
+};
+
+
+// Standard goog.ui.Component implementation.
+
+
+/**
+ * Creates the control's DOM.  Overrides {@link goog.ui.Component#createDom} by
+ * delegating DOM manipulation to the control's renderer.
+ * @override
+ */
+goog.ui.Control.prototype.createDom = function() {
+  var element = this.renderer_.createDom(this);
+  this.setElementInternal(element);
+
+  // Initialize ARIA role.
+  this.renderer_.setAriaRole(element, this.getPreferredAriaRole());
+
+  // Initialize text selection.
+  if (!this.isAllowTextSelection()) {
+    // The renderer is assumed to create selectable elements.  Since making
+    // elements unselectable is expensive, only do it if needed (bug 1037090).
+    this.renderer_.setAllowTextSelection(element, false);
+  }
+
+  // Initialize visibility.
+  if (!this.isVisible()) {
+    // The renderer is assumed to create visible elements. Since hiding
+    // elements can be expensive, only do it if needed (bug 1037105).
+    this.renderer_.setVisible(element, false);
+  }
+};
+
+
+/**
+ * Returns the control's preferred ARIA role. This can be used by a control to
+ * override the role that would be assigned by the renderer.  This is useful in
+ * cases where a different ARIA role is appropriate for a control because of the
+ * context in which it's used.  E.g., a {@link goog.ui.MenuButton} added to a
+ * {@link goog.ui.Select} should have an ARIA role of LISTBOX and not MENUITEM.
+ * @return {?goog.dom.a11y.Role} This control's preferred ARIA role or null if
+ *     no preferred ARIA role is set.
+ */
+goog.ui.Control.prototype.getPreferredAriaRole = function() {
+  return this.preferredAriaRole_;
+};
+
+
+/**
+ * Sets the control's preferred ARIA role. This can be used to override the role
+ * that would be assigned by the renderer.  This is useful in cases where a
+ * different ARIA role is appropriate for a control because of the
+ * context in which it's used.  E.g., a {@link goog.ui.MenuButton} added to a
+ * {@link goog.ui.Select} should have an ARIA role of LISTBOX and not MENUITEM.
+ * @param {goog.dom.a11y.Role} role This control's preferred ARIA role.
+ */
+goog.ui.Control.prototype.setPreferredAriaRole = function(role) {
+  this.preferredAriaRole_ = role;
+};
+
+
+/**
+ * Returns the DOM element into which child components are to be rendered,
+ * or null if the control itself hasn't been rendered yet.  Overrides
+ * {@link goog.ui.Component#getContentElement} by delegating to the renderer.
+ * @return {Element} Element to contain child elements (null if none).
+ * @override
+ */
+goog.ui.Control.prototype.getContentElement = function() {
+  // Delegate to renderer.
+  return this.renderer_.getContentElement(this.getElement());
+};
+
+
+/**
+ * Returns true if the given element can be decorated by this component.
+ * Overrides {@link goog.ui.Component#canDecorate}.
+ * @param {Element} element Element to decorate.
+ * @return {boolean} Whether the element can be decorated by this component.
+ * @override
+ */
+goog.ui.Control.prototype.canDecorate = function(element) {
+  // Controls support pluggable renderers; delegate to the renderer.
+  return this.renderer_.canDecorate(element);
+};
+
+
+/**
+ * Decorates the given element with this component. Overrides {@link
+ * goog.ui.Component#decorateInternal} by delegating DOM manipulation
+ * to the control's renderer.
+ * @param {Element} element Element to decorate.
+ * @protected
+ * @override
+ */
+goog.ui.Control.prototype.decorateInternal = function(element) {
+  element = this.renderer_.decorate(this, element);
+  this.setElementInternal(element);
+
+  // Initialize ARIA role.
+  this.renderer_.setAriaRole(element, this.getPreferredAriaRole());
+
+  // Initialize text selection.
+  if (!this.isAllowTextSelection()) {
+    // Decorated elements are assumed to be selectable.  Since making elements
+    // unselectable is expensive, only do it if needed (bug 1037090).
+    this.renderer_.setAllowTextSelection(element, false);
+  }
+
+  // Initialize visibility based on the decorated element's styling.
+  this.visible_ = element.style.display != 'none';
+};
+
+
+/**
+ * Configures the component after its DOM has been rendered, and sets up event
+ * handling.  Overrides {@link goog.ui.Component#enterDocument}.
+ * @override
+ */
+goog.ui.Control.prototype.enterDocument = function() {
+  goog.ui.Control.superClass_.enterDocument.call(this);
+
+  // Call the renderer's initializeDom method to configure properties of the
+  // control's DOM that can only be done once it's in the document.
+  this.renderer_.initializeDom(this);
+
+  // Initialize event handling if at least one state other than DISABLED is
+  // supported.
+  if (this.supportedStates_ & ~goog.ui.Component.State.DISABLED) {
+    // Initialize mouse event handling if the control is configured to handle
+    // its own mouse events.  (Controls hosted in containers don't need to
+    // handle their own mouse events.)
+    if (this.isHandleMouseEvents()) {
+      this.enableMouseEventHandling_(true);
+    }
+
+    // Initialize keyboard event handling if the control is focusable and has
+    // a key event target.  (Controls hosted in containers typically aren't
+    // focusable, allowing their container to handle keyboard events for them.)
+    if (this.isSupportedState(goog.ui.Component.State.FOCUSED)) {
+      var keyTarget = this.getKeyEventTarget();
+      if (keyTarget) {
+        var keyHandler = this.getKeyHandler();
+        keyHandler.attach(keyTarget);
+        this.getHandler().
+            listen(keyHandler, goog.events.KeyHandler.EventType.KEY,
+                this.handleKeyEvent).
+            listen(keyTarget, goog.events.EventType.FOCUS,
+                this.handleFocus).
+            listen(keyTarget, goog.events.EventType.BLUR,
+                this.handleBlur);
+      }
+    }
+  }
+};
+
+
+/**
+ * Enables or disables mouse event handling on the control.
+ * @param {boolean} enable Whether to enable mouse event handling.
+ * @private
+ */
+goog.ui.Control.prototype.enableMouseEventHandling_ = function(enable) {
+  var handler = this.getHandler();
+  var element = this.getElement();
+  if (enable) {
+    handler.
+        listen(element, goog.events.EventType.MOUSEOVER, this.handleMouseOver).
+        listen(element, goog.events.EventType.MOUSEDOWN, this.handleMouseDown).
+        listen(element, goog.events.EventType.MOUSEUP, this.handleMouseUp).
+        listen(element, goog.events.EventType.MOUSEOUT, this.handleMouseOut);
+    if (this.handleContextMenu != goog.nullFunction) {
+      handler.listen(element, goog.events.EventType.CONTEXTMENU,
+          this.handleContextMenu);
+    }
+    if (goog.userAgent.IE) {
+      handler.listen(element, goog.events.EventType.DBLCLICK,
+          this.handleDblClick);
+    }
+  } else {
+    handler.
+        unlisten(element, goog.events.EventType.MOUSEOVER,
+            this.handleMouseOver).
+        unlisten(element, goog.events.EventType.MOUSEDOWN,
+            this.handleMouseDown).
+        unlisten(element, goog.events.EventType.MOUSEUP, this.handleMouseUp).
+        unlisten(element, goog.events.EventType.MOUSEOUT, this.handleMouseOut);
+    if (this.handleContextMenu != goog.nullFunction) {
+      handler.unlisten(element, goog.events.EventType.CONTEXTMENU,
+          this.handleContextMenu);
+    }
+    if (goog.userAgent.IE) {
+      handler.unlisten(element, goog.events.EventType.DBLCLICK,
+          this.handleDblClick);
+    }
+  }
+};
+
+
+/**
+ * Cleans up the component before its DOM is removed from the document, and
+ * removes event handlers.  Overrides {@link goog.ui.Component#exitDocument}
+ * by making sure that components that are removed from the document aren't
+ * focusable (i.e. have no tab index).
+ * @override
+ */
+goog.ui.Control.prototype.exitDocument = function() {
+  goog.ui.Control.superClass_.exitDocument.call(this);
+  if (this.keyHandler_) {
+    this.keyHandler_.detach();
+  }
+  if (this.isVisible() && this.isEnabled()) {
+    this.renderer_.setFocusable(this, false);
+  }
+};
+
+
+/** @override */
+goog.ui.Control.prototype.disposeInternal = function() {
+  goog.ui.Control.superClass_.disposeInternal.call(this);
+  if (this.keyHandler_) {
+    this.keyHandler_.dispose();
+    delete this.keyHandler_;
+  }
+  delete this.renderer_;
+  this.content_ = null;
+  this.extraClassNames_ = null;
+};
+
+
+// Component content management.
+
+
+/**
+ * Returns the text caption or DOM structure displayed in the component.
+ * @return {goog.ui.ControlContent} Text caption or DOM structure
+ *     comprising the component's contents.
+ */
+goog.ui.Control.prototype.getContent = function() {
+  return this.content_;
+};
+
+
+/**
+ * Sets the component's content to the given text caption, element, or array of
+ * nodes.  (If the argument is an array of nodes, it must be an actual array,
+ * not an array-like object.)
+ * @param {goog.ui.ControlContent} content Text caption or DOM
+ *     structure to set as the component's contents.
+ */
+goog.ui.Control.prototype.setContent = function(content) {
+  // Controls support pluggable renderers; delegate to the renderer.
+  this.renderer_.setContent(this.getElement(), content);
+
+  // setContentInternal needs to be after the renderer, since the implementation
+  // may depend on the content being in the DOM.
+  this.setContentInternal(content);
+};
+
+
+/**
+ * Sets the component's content to the given text caption, element, or array
+ * of nodes.  Unlike {@link #setContent}, doesn't modify the component's DOM.
+ * Called by renderers during element decoration.  Considered protected; should
+ * only be used within this package and by subclasses.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure
+ *     to set as the component's contents.
+ * @protected
+ */
+goog.ui.Control.prototype.setContentInternal = function(content) {
+  this.content_ = content;
+};
+
+
+/**
+ * @return {string} Text caption of the control or empty string if none.
+ */
+goog.ui.Control.prototype.getCaption = function() {
+  var content = this.getContent();
+  if (!content) {
+    return '';
+  }
+  var caption =
+      goog.isString(content) ? content :
+      goog.isArray(content) ? goog.array.map(content,
+          goog.dom.getRawTextContent).join('') :
+      goog.dom.getTextContent(/** @type {!Node} */ (content));
+  return goog.string.collapseBreakingSpaces(caption);
+};
+
+
+/**
+ * Sets the text caption of the component.
+ * @param {string} caption Text caption of the component.
+ */
+goog.ui.Control.prototype.setCaption = function(caption) {
+  this.setContent(caption);
+};
+
+
+// Component state management.
+
+
+/** @override */
+goog.ui.Control.prototype.setRightToLeft = function(rightToLeft) {
+  // The superclass implementation ensures the control isn't in the document.
+  goog.ui.Control.superClass_.setRightToLeft.call(this, rightToLeft);
+
+  var element = this.getElement();
+  if (element) {
+    this.renderer_.setRightToLeft(element, rightToLeft);
+  }
+};
+
+
+/**
+ * Returns true if the control allows text selection within its DOM, false
+ * otherwise.  Controls that disallow text selection have the appropriate
+ * unselectable styling applied to their elements.  Note that controls hosted
+ * in containers will report that they allow text selection even if their
+ * container disallows text selection.
+ * @return {boolean} Whether the control allows text selection.
+ */
+goog.ui.Control.prototype.isAllowTextSelection = function() {
+  return this.allowTextSelection_;
+};
+
+
+/**
+ * Allows or disallows text selection within the control's DOM.
+ * @param {boolean} allow Whether the control should allow text selection.
+ */
+goog.ui.Control.prototype.setAllowTextSelection = function(allow) {
+  this.allowTextSelection_ = allow;
+
+  var element = this.getElement();
+  if (element) {
+    this.renderer_.setAllowTextSelection(element, allow);
+  }
+};
+
+
+/**
+ * Returns true if the component's visibility is set to visible, false if
+ * it is set to hidden.  A component that is set to hidden is guaranteed
+ * to be hidden from the user, but the reverse isn't necessarily true.
+ * A component may be set to visible but can otherwise be obscured by another
+ * element, rendered off-screen, or hidden using direct CSS manipulation.
+ * @return {boolean} Whether the component is visible.
+ */
+goog.ui.Control.prototype.isVisible = function() {
+  return this.visible_;
+};
+
+
+/**
+ * Shows or hides the component.  Does nothing if the component already has
+ * the requested visibility.  Otherwise, dispatches a SHOW or HIDE event as
+ * appropriate, giving listeners a chance to prevent the visibility change.
+ * When showing a component that is both enabled and focusable, ensures that
+ * its key target has a tab index.  When hiding a component that is enabled
+ * and focusable, blurs its key target and removes its tab index.
+ * @param {boolean} visible Whether to show or hide the component.
+ * @param {boolean=} opt_force If true, doesn't check whether the component
+ *     already has the requested visibility, and doesn't dispatch any events.
+ * @return {boolean} Whether the visibility was changed.
+ */
+goog.ui.Control.prototype.setVisible = function(visible, opt_force) {
+  if (opt_force || (this.visible_ != visible && this.dispatchEvent(visible ?
+      goog.ui.Component.EventType.SHOW : goog.ui.Component.EventType.HIDE))) {
+    var element = this.getElement();
+    if (element) {
+      this.renderer_.setVisible(element, visible);
+    }
+    if (this.isEnabled()) {
+      this.renderer_.setFocusable(this, visible);
+    }
+    this.visible_ = visible;
+    return true;
+  }
+  return false;
+};
+
+
+/**
+ * Returns true if the component is enabled, false otherwise.
+ * @return {boolean} Whether the component is enabled.
+ */
+goog.ui.Control.prototype.isEnabled = function() {
+  return !this.hasState(goog.ui.Component.State.DISABLED);
+};
+
+
+/**
+ * Returns true if the control has a parent that is itself disabled, false
+ * otherwise.
+ * @return {boolean} Whether the component is hosted in a disabled container.
+ * @private
+ */
+goog.ui.Control.prototype.isParentDisabled_ = function() {
+  var parent = this.getParent();
+  return !!parent && typeof parent.isEnabled == 'function' &&
+      !parent.isEnabled();
+};
+
+
+/**
+ * Enables or disables the component.  Does nothing if this state transition
+ * is disallowed.  If the component is both visible and focusable, updates its
+ * focused state and tab index as needed.  If the component is being disabled,
+ * ensures that it is also deactivated and un-highlighted first.  Note that the
+ * component's enabled/disabled state is "locked" as long as it is hosted in a
+ * {@link goog.ui.Container} that is itself disabled; this is to prevent clients
+ * from accidentally re-enabling a control that is in a disabled container.
+ * @param {boolean} enable Whether to enable or disable the component.
+ * @see #isTransitionAllowed
+ */
+goog.ui.Control.prototype.setEnabled = function(enable) {
+  if (!this.isParentDisabled_() &&
+      this.isTransitionAllowed(goog.ui.Component.State.DISABLED, !enable)) {
+    if (!enable) {
+      this.setActive(false);
+      this.setHighlighted(false);
+    }
+    if (this.isVisible()) {
+      this.renderer_.setFocusable(this, enable);
+    }
+    this.setState(goog.ui.Component.State.DISABLED, !enable);
+  }
+};
+
+
+/**
+ * Returns true if the component is currently highlighted, false otherwise.
+ * @return {boolean} Whether the component is highlighted.
+ */
+goog.ui.Control.prototype.isHighlighted = function() {
+  return this.hasState(goog.ui.Component.State.HOVER);
+};
+
+
+/**
+ * Highlights or unhighlights the component.  Does nothing if this state
+ * transition is disallowed.
+ * @param {boolean} highlight Whether to highlight or unhighlight the component.
+ * @see #isTransitionAllowed
+ */
+goog.ui.Control.prototype.setHighlighted = function(highlight) {
+  if (this.isTransitionAllowed(goog.ui.Component.State.HOVER, highlight)) {
+    this.setState(goog.ui.Component.State.HOVER, highlight);
+  }
+};
+
+
+/**
+ * Returns true if the component is active (pressed), false otherwise.
+ * @return {boolean} Whether the component is active.
+ */
+goog.ui.Control.prototype.isActive = function() {
+  return this.hasState(goog.ui.Component.State.ACTIVE);
+};
+
+
+/**
+ * Activates or deactivates the component.  Does nothing if this state
+ * transition is disallowed.
+ * @param {boolean} active Whether to activate or deactivate the component.
+ * @see #isTransitionAllowed
+ */
+goog.ui.Control.prototype.setActive = function(active) {
+  if (this.isTransitionAllowed(goog.ui.Component.State.ACTIVE, active)) {
+    this.setState(goog.ui.Component.State.ACTIVE, active);
+  }
+};
+
+
+/**
+ * Returns true if the component is selected, false otherwise.
+ * @return {boolean} Whether the component is selected.
+ */
+goog.ui.Control.prototype.isSelected = function() {
+  return this.hasState(goog.ui.Component.State.SELECTED);
+};
+
+
+/**
+ * Selects or unselects the component.  Does nothing if this state transition
+ * is disallowed.
+ * @param {boolean} select Whether to select or unselect the component.
+ * @see #isTransitionAllowed
+ */
+goog.ui.Control.prototype.setSelected = function(select) {
+  if (this.isTransitionAllowed(goog.ui.Component.State.SELECTED, select)) {
+    this.setState(goog.ui.Component.State.SELECTED, select);
+  }
+};
+
+
+/**
+ * Returns true if the component is checked, false otherwise.
+ * @return {boolean} Whether the component is checked.
+ */
+goog.ui.Control.prototype.isChecked = function() {
+  return this.hasState(goog.ui.Component.State.CHECKED);
+};
+
+
+/**
+ * Checks or unchecks the component.  Does nothing if this state transition
+ * is disallowed.
+ * @param {boolean} check Whether to check or uncheck the component.
+ * @see #isTransitionAllowed
+ */
+goog.ui.Control.prototype.setChecked = function(check) {
+  if (this.isTransitionAllowed(goog.ui.Component.State.CHECKED, check)) {
+    this.setState(goog.ui.Component.State.CHECKED, check);
+  }
+};
+
+
+/**
+ * Returns true if the component is styled to indicate that it has keyboard
+ * focus, false otherwise.  Note that {@code isFocused()} returning true
+ * doesn't guarantee that the component's key event target has keyborad focus,
+ * only that it is styled as such.
+ * @return {boolean} Whether the component is styled to indicate as having
+ *     keyboard focus.
+ */
+goog.ui.Control.prototype.isFocused = function() {
+  return this.hasState(goog.ui.Component.State.FOCUSED);
+};
+
+
+/**
+ * Applies or removes styling indicating that the component has keyboard focus.
+ * Note that unlike the other "set" methods, this method is called as a result
+ * of the component's element having received or lost keyboard focus, not the
+ * other way around, so calling {@code setFocused(true)} doesn't guarantee that
+ * the component's key event target has keyboard focus, only that it is styled
+ * as such.
+ * @param {boolean} focused Whether to apply or remove styling to indicate that
+ *     the component's element has keyboard focus.
+ */
+goog.ui.Control.prototype.setFocused = function(focused) {
+  if (this.isTransitionAllowed(goog.ui.Component.State.FOCUSED, focused)) {
+    this.setState(goog.ui.Component.State.FOCUSED, focused);
+  }
+};
+
+
+/**
+ * Returns true if the component is open (expanded), false otherwise.
+ * @return {boolean} Whether the component is open.
+ */
+goog.ui.Control.prototype.isOpen = function() {
+  return this.hasState(goog.ui.Component.State.OPENED);
+};
+
+
+/**
+ * Opens (expands) or closes (collapses) the component.  Does nothing if this
+ * state transition is disallowed.
+ * @param {boolean} open Whether to open or close the component.
+ * @see #isTransitionAllowed
+ */
+goog.ui.Control.prototype.setOpen = function(open) {
+  if (this.isTransitionAllowed(goog.ui.Component.State.OPENED, open)) {
+    this.setState(goog.ui.Component.State.OPENED, open);
+  }
+};
+
+
+/**
+ * Returns the component's state as a bit mask of {@link
+ * goog.ui.Component.State}s.
+ * @return {number} Bit mask representing component state.
+ */
+goog.ui.Control.prototype.getState = function() {
+  return this.state_;
+};
+
+
+/**
+ * Returns true if the component is in the specified state, false otherwise.
+ * @param {goog.ui.Component.State} state State to check.
+ * @return {boolean} Whether the component is in the given state.
+ */
+goog.ui.Control.prototype.hasState = function(state) {
+  return !!(this.state_ & state);
+};
+
+
+/**
+ * Sets or clears the given state on the component, and updates its styling
+ * accordingly.  Does nothing if the component is already in the correct state
+ * or if it doesn't support the specified state.  Doesn't dispatch any state
+ * transition events; use advisedly.
+ * @param {goog.ui.Component.State} state State to set or clear.
+ * @param {boolean} enable Whether to set or clear the state (if supported).
+ */
+goog.ui.Control.prototype.setState = function(state, enable) {
+  if (this.isSupportedState(state) && enable != this.hasState(state)) {
+    // Delegate actual styling to the renderer, since it is DOM-specific.
+    this.renderer_.setState(this, state, enable);
+    this.state_ = enable ? this.state_ | state : this.state_ & ~state;
+  }
+};
+
+
+/**
+ * Sets the component's state to the state represented by a bit mask of
+ * {@link goog.ui.Component.State}s.  Unlike {@link #setState}, doesn't
+ * update the component's styling, and doesn't reject unsupported states.
+ * Called by renderers during element decoration.  Considered protected;
+ * should only be used within this package and by subclasses.
+ * @param {number} state Bit mask representing component state.
+ * @protected
+ */
+goog.ui.Control.prototype.setStateInternal = function(state) {
+  this.state_ = state;
+};
+
+
+/**
+ * Returns true if the component supports the specified state, false otherwise.
+ * @param {goog.ui.Component.State} state State to check.
+ * @return {boolean} Whether the component supports the given state.
+ */
+goog.ui.Control.prototype.isSupportedState = function(state) {
+  return !!(this.supportedStates_ & state);
+};
+
+
+/**
+ * Enables or disables support for the given state. Disabling support
+ * for a state while the component is in that state is an error.
+ * @param {goog.ui.Component.State} state State to support or de-support.
+ * @param {boolean} support Whether the component should support the state.
+ * @throws {Error} If disabling support for a state the control is currently in.
+ */
+goog.ui.Control.prototype.setSupportedState = function(state, support) {
+  if (this.isInDocument() && this.hasState(state) && !support) {
+    // Since we hook up event handlers in enterDocument(), this is an error.
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+
+  if (!support && this.hasState(state)) {
+    // We are removing support for a state that the component is currently in.
+    this.setState(state, false);
+  }
+
+  this.supportedStates_ = support ?
+      this.supportedStates_ | state : this.supportedStates_ & ~state;
+};
+
+
+/**
+ * Returns true if the component provides default event handling for the state,
+ * false otherwise.
+ * @param {goog.ui.Component.State} state State to check.
+ * @return {boolean} Whether the component provides default event handling for
+ *     the state.
+ */
+goog.ui.Control.prototype.isAutoState = function(state) {
+  return !!(this.autoStates_ & state) && this.isSupportedState(state);
+};
+
+
+/**
+ * Enables or disables automatic event handling for the given state(s).
+ * @param {number} states Bit mask of {@link goog.ui.Component.State}s for which
+ *     default event handling is to be enabled or disabled.
+ * @param {boolean} enable Whether the component should provide default event
+ *     handling for the state(s).
+ */
+goog.ui.Control.prototype.setAutoStates = function(states, enable) {
+  this.autoStates_ = enable ?
+      this.autoStates_ | states : this.autoStates_ & ~states;
+};
+
+
+/**
+ * Returns true if the component is set to dispatch transition events for the
+ * given state, false otherwise.
+ * @param {goog.ui.Component.State} state State to check.
+ * @return {boolean} Whether the component dispatches transition events for
+ *     the state.
+ */
+goog.ui.Control.prototype.isDispatchTransitionEvents = function(state) {
+  return !!(this.statesWithTransitionEvents_ & state) &&
+      this.isSupportedState(state);
+};
+
+
+/**
+ * Enables or disables transition events for the given state(s).  Controls
+ * handle state transitions internally by default, and only dispatch state
+ * transition events if explicitly requested to do so by calling this method.
+ * @param {number} states Bit mask of {@link goog.ui.Component.State}s for
+ *     which transition events should be enabled or disabled.
+ * @param {boolean} enable Whether transition events should be enabled.
+ */
+goog.ui.Control.prototype.setDispatchTransitionEvents = function(states,
+    enable) {
+  this.statesWithTransitionEvents_ = enable ?
+      this.statesWithTransitionEvents_ | states :
+      this.statesWithTransitionEvents_ & ~states;
+};
+
+
+/**
+ * Returns true if the transition into or out of the given state is allowed to
+ * proceed, false otherwise.  A state transition is allowed under the following
+ * conditions:
+ * <ul>
+ *   <li>the component supports the state,
+ *   <li>the component isn't already in the target state,
+ *   <li>either the component is configured not to dispatch events for this
+ *       state transition, or a transition event was dispatched and wasn't
+ *       canceled by any event listener, and
+ *   <li>the component hasn't been disposed of
+ * </ul>
+ * Considered protected; should only be used within this package and by
+ * subclasses.
+ * @param {goog.ui.Component.State} state State to/from which the control is
+ *     transitioning.
+ * @param {boolean} enable Whether the control is entering or leaving the state.
+ * @return {boolean} Whether the state transition is allowed to proceed.
+ * @protected
+ */
+goog.ui.Control.prototype.isTransitionAllowed = function(state, enable) {
+  return this.isSupportedState(state) &&
+      this.hasState(state) != enable &&
+      (!(this.statesWithTransitionEvents_ & state) || this.dispatchEvent(
+          goog.ui.Component.getStateTransitionEvent(state, enable))) &&
+      !this.isDisposed();
+};
+
+
+// Default event handlers, to be overridden in subclasses.
+
+
+/**
+ * Handles mouseover events.  Dispatches an ENTER event; if the event isn't
+ * canceled, the component is enabled, and it supports auto-highlighting,
+ * highlights the component.  Considered protected; should only be used
+ * within this package and by subclasses.
+ * @param {goog.events.BrowserEvent} e Mouse event to handle.
+ */
+goog.ui.Control.prototype.handleMouseOver = function(e) {
+  // Ignore mouse moves between descendants.
+  if (!goog.ui.Control.isMouseEventWithinElement_(e, this.getElement()) &&
+      this.dispatchEvent(goog.ui.Component.EventType.ENTER) &&
+      this.isEnabled() &&
+      this.isAutoState(goog.ui.Component.State.HOVER)) {
+    this.setHighlighted(true);
+  }
+};
+
+
+/**
+ * Handles mouseout events.  Dispatches a LEAVE event; if the event isn't
+ * canceled, and the component supports auto-highlighting, deactivates and
+ * un-highlights the component.  Considered protected; should only be used
+ * within this package and by subclasses.
+ * @param {goog.events.BrowserEvent} e Mouse event to handle.
+ */
+goog.ui.Control.prototype.handleMouseOut = function(e) {
+  if (!goog.ui.Control.isMouseEventWithinElement_(e, this.getElement()) &&
+      this.dispatchEvent(goog.ui.Component.EventType.LEAVE)) {
+    if (this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+      // Deactivate on mouseout; otherwise we lose track of the mouse button.
+      this.setActive(false);
+    }
+    if (this.isAutoState(goog.ui.Component.State.HOVER)) {
+      this.setHighlighted(false);
+    }
+  }
+};
+
+
+/**
+ * Handles contextmenu events.
+ * @param {goog.events.BrowserEvent} e Event to handle.
+ */
+goog.ui.Control.prototype.handleContextMenu = goog.nullFunction;
+
+
+/**
+ * Checks if a mouse event (mouseover or mouseout) occured below an element.
+ * @param {goog.events.BrowserEvent} e Mouse event (should be mouseover or
+ *     mouseout).
+ * @param {Element} elem The ancestor element.
+ * @return {boolean} Whether the event has a relatedTarget (the element the
+ *     mouse is coming from) and it's a descendent of elem.
+ * @private
+ */
+goog.ui.Control.isMouseEventWithinElement_ = function(e, elem) {
+  // If relatedTarget is null, it means there was no previous element (e.g.
+  // the mouse moved out of the window).  Assume this means that the mouse
+  // event was not within the element.
+  return !!e.relatedTarget && goog.dom.contains(elem, e.relatedTarget);
+};
+
+
+/**
+ * Handles mousedown events.  If the component is enabled, highlights and
+ * activates it.  If the component isn't configured for keyboard access,
+ * prevents it from receiving keyboard focus.  Considered protected; should
+ * only be used within this package andy by subclasses.
+ * @param {goog.events.Event} e Mouse event to handle.
+ */
+goog.ui.Control.prototype.handleMouseDown = function(e) {
+  if (this.isEnabled()) {
+    // Highlight enabled control on mousedown, regardless of the mouse button.
+    if (this.isAutoState(goog.ui.Component.State.HOVER)) {
+      this.setHighlighted(true);
+    }
+
+    // For the left button only, activate the control, and focus its key event
+    // target (if supported).
+    if (e.isMouseActionButton()) {
+      if (this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+        this.setActive(true);
+      }
+      if (this.renderer_.isFocusable(this)) {
+        this.getKeyEventTarget().focus();
+      }
+    }
+  }
+
+  // Cancel the default action unless the control allows text selection.
+  if (!this.isAllowTextSelection() && e.isMouseActionButton()) {
+    e.preventDefault();
+  }
+};
+
+
+/**
+ * Handles mouseup events.  If the component is enabled, highlights it.  If
+ * the component has previously been activated, performs its associated action
+ * by calling {@link performActionInternal}, then deactivates it.  Considered
+ * protected; should only be used within this package and by subclasses.
+ * @param {goog.events.Event} e Mouse event to handle.
+ */
+goog.ui.Control.prototype.handleMouseUp = function(e) {
+  if (this.isEnabled()) {
+    if (this.isAutoState(goog.ui.Component.State.HOVER)) {
+      this.setHighlighted(true);
+    }
+    if (this.isActive() &&
+        this.performActionInternal(e) &&
+        this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+      this.setActive(false);
+    }
+  }
+};
+
+
+/**
+ * Handles dblclick events.  Should only be registered if the user agent is
+ * IE.  If the component is enabled, performs its associated action by calling
+ * {@link performActionInternal}.  This is used to allow more performant
+ * buttons in IE.  In IE, no mousedown event is fired when that mousedown will
+ * trigger a dblclick event.  Because of this, a user clicking quickly will
+ * only cause ACTION events to fire on every other click.  This is a workaround
+ * to generate ACTION events for every click.  Unfortunately, this workaround
+ * won't ever trigger the ACTIVE state.  This is roughly the same behaviour as
+ * if this were a 'button' element with a listener on mouseup.  Considered
+ * protected; should only be used within this package and by subclasses.
+ * @param {goog.events.Event} e Mouse event to handle.
+ */
+goog.ui.Control.prototype.handleDblClick = function(e) {
+  if (this.isEnabled()) {
+    this.performActionInternal(e);
+  }
+};
+
+
+/**
+ * Performs the appropriate action when the control is activated by the user.
+ * The default implementation first updates the checked and selected state of
+ * controls that support them, then dispatches an ACTION event.  Considered
+ * protected; should only be used within this package and by subclasses.
+ * @param {goog.events.Event} e Event that triggered the action.
+ * @return {boolean} Whether the action is allowed to proceed.
+ * @protected
+ */
+goog.ui.Control.prototype.performActionInternal = function(e) {
+  if (this.isAutoState(goog.ui.Component.State.CHECKED)) {
+    this.setChecked(!this.isChecked());
+  }
+  if (this.isAutoState(goog.ui.Component.State.SELECTED)) {
+    this.setSelected(true);
+  }
+  if (this.isAutoState(goog.ui.Component.State.OPENED)) {
+    this.setOpen(!this.isOpen());
+  }
+
+  var actionEvent = new goog.events.Event(goog.ui.Component.EventType.ACTION,
+      this);
+  if (e) {
+    actionEvent.altKey = e.altKey;
+    actionEvent.ctrlKey = e.ctrlKey;
+    actionEvent.metaKey = e.metaKey;
+    actionEvent.shiftKey = e.shiftKey;
+    actionEvent.platformModifierKey = e.platformModifierKey;
+  }
+  return this.dispatchEvent(actionEvent);
+};
+
+
+/**
+ * Handles focus events on the component's key event target element.  If the
+ * component is focusable, updates its state and styling to indicate that it
+ * now has keyboard focus.  Considered protected; should only be used within
+ * this package and by subclasses.  <b>Warning:</b> IE dispatches focus and
+ * blur events asynchronously!
+ * @param {goog.events.Event} e Focus event to handle.
+ */
+goog.ui.Control.prototype.handleFocus = function(e) {
+  if (this.isAutoState(goog.ui.Component.State.FOCUSED)) {
+    this.setFocused(true);
+  }
+};
+
+
+/**
+ * Handles blur events on the component's key event target element.  Always
+ * deactivates the component.  In addition, if the component is focusable,
+ * updates its state and styling to indicate that it no longer has keyboard
+ * focus.  Considered protected; should only be used within this package and
+ * by subclasses.  <b>Warning:</b> IE dispatches focus and blur events
+ * asynchronously!
+ * @param {goog.events.Event} e Blur event to handle.
+ */
+goog.ui.Control.prototype.handleBlur = function(e) {
+  if (this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+    this.setActive(false);
+  }
+  if (this.isAutoState(goog.ui.Component.State.FOCUSED)) {
+    this.setFocused(false);
+  }
+};
+
+
+/**
+ * Attempts to handle a keyboard event, if the component is enabled and visible,
+ * by calling {@link handleKeyEventInternal}.  Considered protected; should only
+ * be used within this package and by subclasses.
+ * @param {goog.events.KeyEvent} e Key event to handle.
+ * @return {boolean} Whether the key event was handled.
+ */
+goog.ui.Control.prototype.handleKeyEvent = function(e) {
+  if (this.isVisible() && this.isEnabled() &&
+      this.handleKeyEventInternal(e)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
+  }
+  return false;
+};
+
+
+/**
+ * Attempts to handle a keyboard event; returns true if the event was handled,
+ * false otherwise.  Considered protected; should only be used within this
+ * package and by subclasses.
+ * @param {goog.events.KeyEvent} e Key event to handle.
+ * @return {boolean} Whether the key event was handled.
+ * @protected
+ */
+goog.ui.Control.prototype.handleKeyEventInternal = function(e) {
+  return e.keyCode == goog.events.KeyCodes.ENTER &&
+      this.performActionInternal(e);
+};
+
+
+// Register the default renderer for goog.ui.Controls.
+goog.ui.registry.setDefaultRenderer(goog.ui.Control, goog.ui.ControlRenderer);
+
+
+// Register a decorator factory function for goog.ui.Controls.
+goog.ui.registry.setDecoratorByClassName(goog.ui.ControlRenderer.CSS_CLASS,
+    function() {
+      return new goog.ui.Control(null);
+    });
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Renderer for {@link goog.ui.MenuSeparator}s.
+ *
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.MenuSeparatorRenderer');
+
+goog.require('goog.dom');
+goog.require('goog.dom.classes');
+goog.require('goog.ui.ControlContent');
+goog.require('goog.ui.ControlRenderer');
+
+
+
+/**
+ * Renderer for menu separators.
+ * @constructor
+ * @extends {goog.ui.ControlRenderer}
+ */
+goog.ui.MenuSeparatorRenderer = function() {
+  goog.ui.ControlRenderer.call(this);
+};
+goog.inherits(goog.ui.MenuSeparatorRenderer, goog.ui.ControlRenderer);
+goog.addSingletonGetter(goog.ui.MenuSeparatorRenderer);
+
+
+/**
+ * Default CSS class to be applied to the root element of components rendered
+ * by this renderer.
+ * @type {string}
+ */
+goog.ui.MenuSeparatorRenderer.CSS_CLASS = goog.getCssName('goog-menuseparator');
+
+
+/**
+ * Returns an empty, styled menu separator DIV.  Overrides {@link
+ * goog.ui.ControlRenderer#createDom}.
+ * @param {goog.ui.Control} separator goog.ui.Separator to render.
+ * @return {Element} Root element for the separator.
+ * @override
+ */
+goog.ui.MenuSeparatorRenderer.prototype.createDom = function(separator) {
+  return separator.getDomHelper().createDom('div', this.getCssClass());
+};
+
+
+/**
+ * Takes an existing element, and decorates it with the separator.  Overrides
+ * {@link goog.ui.ControlRenderer#decorate}.
+ * @param {goog.ui.Control} separator goog.ui.MenuSeparator to decorate the
+ *     element.
+ * @param {Element} element Element to decorate.
+ * @return {Element} Decorated element.
+ * @override
+ */
+goog.ui.MenuSeparatorRenderer.prototype.decorate = function(separator,
+                                                            element) {
+  // Normally handled in the superclass. But we don't call the superclass.
+  if (element.id) {
+    separator.setId(element.id);
+  }
+
+  if (element.tagName == 'HR') {
+    // Replace HR with separator.
+    var hr = element;
+    element = this.createDom(separator);
+    goog.dom.insertSiblingBefore(element, hr);
+    goog.dom.removeNode(hr);
+  } else {
+    goog.dom.classes.add(element, this.getCssClass());
+  }
+  return element;
+};
+
+
+/**
+ * Overrides {@link goog.ui.ControlRenderer#setContent} to do nothing, since
+ * separators are empty.
+ * @param {Element} separator The separator's root element.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure to be
+ *    set as the separators's content (ignored).
+ * @override
+ */
+goog.ui.MenuSeparatorRenderer.prototype.setContent = function(separator,
+                                                              content) {
+  // Do nothing.  Separators are empty.
+};
+
+
+/**
+ * Returns the CSS class to be applied to the root element of components
+ * rendered using this renderer.
+ * @return {string} Renderer-specific CSS class.
+ * @override
+ */
+goog.ui.MenuSeparatorRenderer.prototype.getCssClass = function() {
+  return goog.ui.MenuSeparatorRenderer.CSS_CLASS;
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A class for representing a separator, with renderers for both
+ * horizontal (menu) and vertical (toolbar) separators.
+ *
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.Separator');
+
+goog.require('goog.dom.a11y');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.Control');
+goog.require('goog.ui.MenuSeparatorRenderer');
+goog.require('goog.ui.registry');
+
+
+
+/**
+ * Class representing a separator.  Although it extends {@link goog.ui.Control},
+ * the Separator class doesn't allocate any event handlers, nor does it change
+ * its appearance on mouseover, etc.
+ * @param {goog.ui.MenuSeparatorRenderer=} opt_renderer Renderer to render or
+ *    decorate the separator; defaults to {@link goog.ui.MenuSeparatorRenderer}.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper, used for
+ *    document interaction.
+ * @constructor
+ * @extends {goog.ui.Control}
+ */
+goog.ui.Separator = function(opt_renderer, opt_domHelper) {
+  goog.ui.Control.call(this, null, opt_renderer ||
+      goog.ui.MenuSeparatorRenderer.getInstance(), opt_domHelper);
+
+  this.setSupportedState(goog.ui.Component.State.DISABLED, false);
+  this.setSupportedState(goog.ui.Component.State.HOVER, false);
+  this.setSupportedState(goog.ui.Component.State.ACTIVE, false);
+  this.setSupportedState(goog.ui.Component.State.FOCUSED, false);
+
+  // Separators are always considered disabled.
+  this.setStateInternal(goog.ui.Component.State.DISABLED);
+};
+goog.inherits(goog.ui.Separator, goog.ui.Control);
+
+
+/**
+ * Configures the component after its DOM has been rendered.  Overrides
+ * {@link goog.ui.Control#enterDocument} by making sure no event handler
+ * is allocated.
+ * @override
+ */
+goog.ui.Separator.prototype.enterDocument = function() {
+  goog.ui.Separator.superClass_.enterDocument.call(this);
+  goog.dom.a11y.setRole(this.getElement(), 'separator');
+};
+
+
+// Register a decorator factory function for goog.ui.MenuSeparators.
+goog.ui.registry.setDecoratorByClassName(
+    goog.ui.MenuSeparatorRenderer.CSS_CLASS,
+    function() {
+      // Separator defaults to using MenuSeparatorRenderer.
+      return new goog.ui.Separator();
+    });
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Base class for container renderers.
+ *
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.ContainerRenderer');
+
+goog.require('goog.array');
+goog.require('goog.dom');
+goog.require('goog.dom.a11y');
+goog.require('goog.dom.classes');
+goog.require('goog.string');
+goog.require('goog.style');
+goog.require('goog.ui.Separator');
+goog.require('goog.ui.registry');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * Default renderer for {@link goog.ui.Container}.  Can be used as-is, but
+ * subclasses of Container will probably want to use renderers specifically
+ * tailored for them by extending this class.
+ * @constructor
+ */
+goog.ui.ContainerRenderer = function() {
+};
+goog.addSingletonGetter(goog.ui.ContainerRenderer);
+
+
+/**
+ * Constructs a new renderer and sets the CSS class that the renderer will use
+ * as the base CSS class to apply to all elements rendered by that renderer.
+ * An example to use this function using a menu is:
+ *
+ * <pre>
+ * var myCustomRenderer = goog.ui.ContainerRenderer.getCustomRenderer(
+ *     goog.ui.MenuRenderer, 'my-special-menu');
+ * var newMenu = new goog.ui.Menu(opt_domHelper, myCustomRenderer);
+ * </pre>
+ *
+ * Your styles for the menu can now be:
+ * <pre>
+ * .my-special-menu { }
+ * </pre>
+ *
+ * <em>instead</em> of
+ * <pre>
+ * .CSS_MY_SPECIAL_MENU .goog-menu { }
+ * </pre>
+ *
+ * You would want to use this functionality when you want an instance of a
+ * component to have specific styles different than the other components of the
+ * same type in your application.  This avoids using descendant selectors to
+ * apply the specific styles to this component.
+ *
+ * @param {Function} ctor The constructor of the renderer you want to create.
+ * @param {string} cssClassName The name of the CSS class for this renderer.
+ * @return {goog.ui.ContainerRenderer} An instance of the desired renderer with
+ *     its getCssClass() method overridden to return the supplied custom CSS
+ *     class name.
+ */
+goog.ui.ContainerRenderer.getCustomRenderer = function(ctor, cssClassName) {
+  var renderer = new ctor();
+
+  /**
+   * Returns the CSS class to be applied to the root element of components
+   * rendered using this renderer.
+   * @return {string} Renderer-specific CSS class.
+   */
+  renderer.getCssClass = function() {
+    return cssClassName;
+  };
+
+  return renderer;
+};
+
+
+/**
+ * Default CSS class to be applied to the root element of containers rendered
+ * by this renderer.
+ * @type {string}
+ */
+goog.ui.ContainerRenderer.CSS_CLASS = goog.getCssName('goog-container');
+
+
+/**
+ * Returns the ARIA role to be applied to the container.
+ * See http://wiki/Main/ARIA for more info.
+ * @return {undefined|string} ARIA role.
+ */
+goog.ui.ContainerRenderer.prototype.getAriaRole = function() {
+  // By default, the ARIA role is unspecified.
+  return undefined;
+};
+
+
+/**
+ * Enables or disables the tab index of the element.  Only elements with a
+ * valid tab index can receive focus.
+ * @param {Element} element Element whose tab index is to be changed.
+ * @param {boolean} enable Whether to add or remove the element's tab index.
+ */
+goog.ui.ContainerRenderer.prototype.enableTabIndex = function(element, enable) {
+  if (element) {
+    element.tabIndex = enable ? 0 : -1;
+  }
+};
+
+
+/**
+ * Creates and returns the container's root element.  The default
+ * simply creates a DIV and applies the renderer's own CSS class name to it.
+ * To be overridden in subclasses.
+ * @param {goog.ui.Container} container Container to render.
+ * @return {Element} Root element for the container.
+ */
+goog.ui.ContainerRenderer.prototype.createDom = function(container) {
+  return container.getDomHelper().createDom('div',
+      this.getClassNames(container).join(' '));
+};
+
+
+/**
+ * Returns the DOM element into which child components are to be rendered,
+ * or null if the container hasn't been rendered yet.
+ * @param {Element} element Root element of the container whose content element
+ *     is to be returned.
+ * @return {Element} Element to contain child elements (null if none).
+ */
+goog.ui.ContainerRenderer.prototype.getContentElement = function(element) {
+  return element;
+};
+
+
+/**
+ * Default implementation of {@code canDecorate}; returns true if the element
+ * is a DIV, false otherwise.
+ * @param {Element} element Element to decorate.
+ * @return {boolean} Whether the renderer can decorate the element.
+ */
+goog.ui.ContainerRenderer.prototype.canDecorate = function(element) {
+  return element.tagName == 'DIV';
+};
+
+
+/**
+ * Default implementation of {@code decorate} for {@link goog.ui.Container}s.
+ * Decorates the element with the container, and attempts to decorate its child
+ * elements.  Returns the decorated element.
+ * @param {goog.ui.Container} container Container to decorate the element.
+ * @param {Element} element Element to decorate.
+ * @return {Element} Decorated element.
+ */
+goog.ui.ContainerRenderer.prototype.decorate = function(container, element) {
+  // Set the container's ID to the decorated element's DOM ID, if any.
+  if (element.id) {
+    container.setId(element.id);
+  }
+
+  // Configure the container's state based on the CSS class names it has.
+  var baseClass = this.getCssClass();
+  var hasBaseClass = false;
+  var classNames = goog.dom.classes.get(element);
+  if (classNames) {
+    goog.array.forEach(classNames, function(className) {
+      if (className == baseClass) {
+        hasBaseClass = true;
+      } else if (className) {
+        this.setStateFromClassName(container, className, baseClass);
+      }
+    }, this);
+  }
+
+  if (!hasBaseClass) {
+    // Make sure the container's root element has the renderer's own CSS class.
+    goog.dom.classes.add(element, baseClass);
+  }
+
+  // Decorate the element's children, if applicable.  This should happen after
+  // the container's own state has been initialized, since how children are
+  // decorated may depend on the state of the container.
+  this.decorateChildren(container, this.getContentElement(element));
+
+  return element;
+};
+
+
+/**
+ * Sets the container's state based on the given CSS class name, encountered
+ * during decoration.  CSS class names that don't represent container states
+ * are ignored.  Considered protected; subclasses should override this method
+ * to support more states and CSS class names.
+ * @param {goog.ui.Container} container Container to update.
+ * @param {string} className CSS class name.
+ * @param {string} baseClass Base class name used as the root of state-specific
+ *     class names (typically the renderer's own class name).
+ * @protected
+ */
+goog.ui.ContainerRenderer.prototype.setStateFromClassName = function(container,
+    className, baseClass) {
+  if (className == goog.getCssName(baseClass, 'disabled')) {
+    container.setEnabled(false);
+  } else if (className == goog.getCssName(baseClass, 'horizontal')) {
+    container.setOrientation(goog.ui.Container.Orientation.HORIZONTAL);
+  } else if (className == goog.getCssName(baseClass, 'vertical')) {
+    container.setOrientation(goog.ui.Container.Orientation.VERTICAL);
+  }
+};
+
+
+/**
+ * Takes a container and an element that may contain child elements, decorates
+ * the child elements, and adds the corresponding components to the container
+ * as child components.  Any non-element child nodes (e.g. empty text nodes
+ * introduced by line breaks in the HTML source) are removed from the element.
+ * @param {goog.ui.Container} container Container whose children are to be
+ *     discovered.
+ * @param {Element} element Element whose children are to be decorated.
+ * @param {Element=} opt_firstChild the first child to be decorated.
+ * @suppress {visibility} setElementInternal
+ */
+goog.ui.ContainerRenderer.prototype.decorateChildren = function(container,
+    element, opt_firstChild) {
+  if (element) {
+    var node = opt_firstChild || element.firstChild, next;
+    // Tag soup HTML may result in a DOM where siblings have different parents.
+    while (node && node.parentNode == element) {
+      // Get the next sibling here, since the node may be replaced or removed.
+      next = node.nextSibling;
+      if (node.nodeType == goog.dom.NodeType.ELEMENT) {
+        // Decorate element node.
+        var child = this.getDecoratorForChild(/** @type {Element} */(node));
+        if (child) {
+          // addChild() may need to look at the element.
+          child.setElementInternal(/** @type {Element} */(node));
+          // If the container is disabled, mark the child disabled too.  See
+          // bug 1263729.  Note that this must precede the call to addChild().
+          if (!container.isEnabled()) {
+            child.setEnabled(false);
+          }
+          container.addChild(child);
+          child.decorate(/** @type {Element} */(node));
+        }
+      } else if (!node.nodeValue || goog.string.trim(node.nodeValue) == '') {
+        // Remove empty text node, otherwise madness ensues (e.g. controls that
+        // use goog-inline-block will flicker and shift on hover on Gecko).
+        element.removeChild(node);
+      }
+      node = next;
+    }
+  }
+};
+
+
+/**
+ * Inspects the element, and creates an instance of {@link goog.ui.Control} or
+ * an appropriate subclass best suited to decorate it.  Returns the control (or
+ * null if no suitable class was found).  This default implementation uses the
+ * element's CSS class to find the appropriate control class to instantiate.
+ * May be overridden in subclasses.
+ * @param {Element} element Element to decorate.
+ * @return {goog.ui.Control?} A new control suitable to decorate the element
+ *     (null if none).
+ */
+goog.ui.ContainerRenderer.prototype.getDecoratorForChild = function(element) {
+  return (/** @type {goog.ui.Control} */
+      goog.ui.registry.getDecorator(element));
+};
+
+
+/**
+ * Initializes the container's DOM when the container enters the document.
+ * Called from {@link goog.ui.Container#enterDocument}.
+ * @param {goog.ui.Container} container Container whose DOM is to be initialized
+ *     as it enters the document.
+ */
+goog.ui.ContainerRenderer.prototype.initializeDom = function(container) {
+  var elem = container.getElement();
+
+  // Make sure the container's element isn't selectable.  On Gecko, recursively
+  // marking each child element unselectable is expensive and unnecessary, so
+  // only mark the root element unselectable.
+  goog.style.setUnselectable(elem, true, goog.userAgent.GECKO);
+
+  // IE doesn't support outline:none, so we have to use the hideFocus property.
+  if (goog.userAgent.IE) {
+    elem.hideFocus = true;
+  }
+
+  // Set the ARIA role.
+  var ariaRole = this.getAriaRole();
+  if (ariaRole) {
+    goog.dom.a11y.setRole(elem, ariaRole);
+  }
+};
+
+
+/**
+ * Returns the element within the container's DOM that should receive keyboard
+ * focus (null if none).  The default implementation returns the container's
+ * root element.
+ * @param {goog.ui.Container} container Container whose key event target is
+ *     to be returned.
+ * @return {Element} Key event target (null if none).
+ */
+goog.ui.ContainerRenderer.prototype.getKeyEventTarget = function(container) {
+  return container.getElement();
+};
+
+
+/**
+ * Returns the CSS class to be applied to the root element of containers
+ * rendered using this renderer.
+ * @return {string} Renderer-specific CSS class.
+ */
+goog.ui.ContainerRenderer.prototype.getCssClass = function() {
+  return goog.ui.ContainerRenderer.CSS_CLASS;
+};
+
+
+/**
+ * Returns all CSS class names applicable to the given container, based on its
+ * state.  The array of class names returned includes the renderer's own CSS
+ * class, followed by a CSS class indicating the container's orientation,
+ * followed by any state-specific CSS classes.
+ * @param {goog.ui.Container} container Container whose CSS classes are to be
+ *     returned.
+ * @return {Array.<string>} Array of CSS class names applicable to the
+ *     container.
+ */
+goog.ui.ContainerRenderer.prototype.getClassNames = function(container) {
+  var baseClass = this.getCssClass();
+  var isHorizontal =
+      container.getOrientation() == goog.ui.Container.Orientation.HORIZONTAL;
+  var classNames = [
+    baseClass,
+    (isHorizontal ?
+        goog.getCssName(baseClass, 'horizontal') :
+        goog.getCssName(baseClass, 'vertical'))
+  ];
+  if (!container.isEnabled()) {
+    classNames.push(goog.getCssName(baseClass, 'disabled'));
+  }
+  return classNames;
+};
+
+
+/**
+ * Returns the default orientation of containers rendered or decorated by this
+ * renderer.  The base class implementation returns {@code VERTICAL}.
+ * @return {goog.ui.Container.Orientation} Default orientation for containers
+ *     created or decorated by this renderer.
+ */
+goog.ui.ContainerRenderer.prototype.getDefaultOrientation = function() {
+  return goog.ui.Container.Orientation.VERTICAL;
+};
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Renderer for {@link goog.ui.Menu}s.
+ *
+ * @author robbyw@google.com (Robby Walker)
+ * @author pupius@google.com (Daniel Pupius)
+ */
+
+goog.provide('goog.ui.MenuRenderer');
+
+goog.require('goog.dom');
+goog.require('goog.dom.a11y');
+goog.require('goog.dom.a11y.Role');
+goog.require('goog.dom.a11y.State');
+goog.require('goog.ui.ContainerRenderer');
+goog.require('goog.ui.Separator');
+
+
+
+/**
+ * Default renderer for {@link goog.ui.Menu}s, based on {@link
+ * goog.ui.ContainerRenderer}.
+ * @constructor
+ * @extends {goog.ui.ContainerRenderer}
+ */
+goog.ui.MenuRenderer = function() {
+  goog.ui.ContainerRenderer.call(this);
+};
+goog.inherits(goog.ui.MenuRenderer, goog.ui.ContainerRenderer);
+goog.addSingletonGetter(goog.ui.MenuRenderer);
+
+
+/**
+ * Default CSS class to be applied to the root element of toolbars rendered
+ * by this renderer.
+ * @type {string}
+ */
+goog.ui.MenuRenderer.CSS_CLASS = goog.getCssName('goog-menu');
+
+
+/**
+ * Returns the ARIA role to be applied to menus.
+ * @return {string} ARIA role.
+ * @override
+ */
+goog.ui.MenuRenderer.prototype.getAriaRole = function() {
+  return goog.dom.a11y.Role.MENU;
+};
+
+
+/**
+ * Returns whether the element is a UL or acceptable to our superclass.
+ * @param {Element} element Element to decorate.
+ * @return {boolean} Whether the renderer can decorate the element.
+ * @override
+ */
+goog.ui.MenuRenderer.prototype.canDecorate = function(element) {
+  return element.tagName == 'UL' ||
+      goog.ui.MenuRenderer.superClass_.canDecorate.call(this, element);
+};
+
+
+/**
+ * Inspects the element, and creates an instance of {@link goog.ui.Control} or
+ * an appropriate subclass best suited to decorate it.  Overrides the superclass
+ * implementation by recognizing HR elements as separators.
+ * @param {Element} element Element to decorate.
+ * @return {goog.ui.Control?} A new control suitable to decorate the element
+ *     (null if none).
+ * @override
+ */
+goog.ui.MenuRenderer.prototype.getDecoratorForChild = function(element) {
+  return element.tagName == 'HR' ?
+      new goog.ui.Separator() :
+      goog.ui.MenuRenderer.superClass_.getDecoratorForChild.call(this,
+          element);
+};
+
+
+/**
+ * Returns whether the given element is contained in the menu's DOM.
+ * @param {goog.ui.Menu} menu The menu to test.
+ * @param {Element} element The element to test.
+ * @return {boolean} Whether the given element is contained in the menu.
+ */
+goog.ui.MenuRenderer.prototype.containsElement = function(menu, element) {
+  return goog.dom.contains(menu.getElement(), element);
+};
+
+
+/**
+ * Returns the CSS class to be applied to the root element of containers
+ * rendered using this renderer.
+ * @return {string} Renderer-specific CSS class.
+ * @override
+ */
+goog.ui.MenuRenderer.prototype.getCssClass = function() {
+  return goog.ui.MenuRenderer.CSS_CLASS;
+};
+
+
+/** @override */
+goog.ui.MenuRenderer.prototype.initializeDom = function(container) {
+  goog.ui.MenuRenderer.superClass_.initializeDom.call(this, container);
+
+  var element = container.getElement();
+  goog.dom.a11y.setState(element, goog.dom.a11y.State.HASPOPUP, 'true');
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A class for representing menu separators.
+ * @see goog.ui.Menu
+ *
+ */
+
+goog.provide('goog.ui.MenuSeparator');
+
+goog.require('goog.ui.MenuSeparatorRenderer');
+goog.require('goog.ui.Separator');
+goog.require('goog.ui.registry');
+
+
+
+/**
+ * Class representing a menu separator.  A menu separator extends {@link
+ * goog.ui.Separator} by always setting its renderer to {@link
+ * goog.ui.MenuSeparatorRenderer}.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper used for
+ *     document interactions.
+ * @constructor
+ * @extends {goog.ui.Separator}
+ */
+goog.ui.MenuSeparator = function(opt_domHelper) {
+  goog.ui.Separator.call(this, goog.ui.MenuSeparatorRenderer.getInstance(),
+      opt_domHelper);
+};
+goog.inherits(goog.ui.MenuSeparator, goog.ui.Separator);
+
+
+// Register a decorator factory function for goog.ui.MenuSeparators.
+goog.ui.registry.setDecoratorByClassName(
+    goog.ui.MenuSeparatorRenderer.CSS_CLASS,
+    function() {
+      // Separator defaults to using MenuSeparatorRenderer.
+      return new goog.ui.Separator();
+    });
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Renderer for {@link goog.ui.MenuItem}s.
+ *
+ * @author attila@google.com (Attila Bodis)
+ */
+
+goog.provide('goog.ui.MenuItemRenderer');
+
+goog.require('goog.dom');
+goog.require('goog.dom.a11y');
+goog.require('goog.dom.a11y.Role');
+goog.require('goog.dom.classes');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.ControlContent');
+goog.require('goog.ui.ControlRenderer');
+
+
+
+/**
+ * Default renderer for {@link goog.ui.MenuItem}s.  Each item has the following
+ * structure:
+ * <pre>
+ *   <div class="goog-menuitem">
+ *     <div class="goog-menuitem-content">
+ *       ...(menu item contents)...
+ *     </div>
+ *   </div>
+ * </pre>
+ * @constructor
+ * @extends {goog.ui.ControlRenderer}
+ */
+goog.ui.MenuItemRenderer = function() {
+  goog.ui.ControlRenderer.call(this);
+
+  /**
+   * Commonly used CSS class names, cached here for convenience (and to avoid
+   * unnecessary string concatenation).
+   * @type {!Array.<string>}
+   * @private
+   */
+  this.classNameCache_ = [];
+};
+goog.inherits(goog.ui.MenuItemRenderer, goog.ui.ControlRenderer);
+goog.addSingletonGetter(goog.ui.MenuItemRenderer);
+
+
+/**
+ * CSS class name the renderer applies to menu item elements.
+ * @type {string}
+ */
+goog.ui.MenuItemRenderer.CSS_CLASS = goog.getCssName('goog-menuitem');
+
+
+/**
+ * Constants for referencing composite CSS classes.
+ * @enum {number}
+ * @private
+ */
+goog.ui.MenuItemRenderer.CompositeCssClassIndex_ = {
+  HOVER: 0,
+  CHECKBOX: 1,
+  CONTENT: 2
+};
+
+
+/**
+ * Returns the composite CSS class by using the cached value or by constructing
+ * the value from the base CSS class and the passed index.
+ * @param {goog.ui.MenuItemRenderer.CompositeCssClassIndex_} index Index for the
+ *     CSS class - could be highlight, checkbox or content in usual cases.
+ * @return {string} The composite CSS class.
+ * @private
+ */
+goog.ui.MenuItemRenderer.prototype.getCompositeCssClass_ = function(index) {
+  var result = this.classNameCache_[index];
+  if (!result) {
+    switch (index) {
+      case goog.ui.MenuItemRenderer.CompositeCssClassIndex_.HOVER:
+        result = goog.getCssName(this.getStructuralCssClass(), 'highlight');
+        break;
+      case goog.ui.MenuItemRenderer.CompositeCssClassIndex_.CHECKBOX:
+        result = goog.getCssName(this.getStructuralCssClass(), 'checkbox');
+        break;
+      case goog.ui.MenuItemRenderer.CompositeCssClassIndex_.CONTENT:
+        result = goog.getCssName(this.getStructuralCssClass(), 'content');
+        break;
+    }
+    this.classNameCache_[index] = result;
+  }
+
+  return result;
+};
+
+
+/** @override */
+goog.ui.MenuItemRenderer.prototype.getAriaRole = function() {
+  return goog.dom.a11y.Role.MENU_ITEM;
+};
+
+
+/**
+ * Overrides {@link goog.ui.ControlRenderer#createDom} by adding extra markup
+ * and stying to the menu item's element if it is selectable or checkable.
+ * @param {goog.ui.Control} item Menu item to render.
+ * @return {Element} Root element for the item.
+ * @override
+ */
+goog.ui.MenuItemRenderer.prototype.createDom = function(item) {
+  var element = item.getDomHelper().createDom(
+      'div', this.getClassNames(item).join(' '),
+      this.createContent(item.getContent(), item.getDomHelper()));
+  this.setEnableCheckBoxStructure(item, element,
+      item.isSupportedState(goog.ui.Component.State.SELECTED) ||
+      item.isSupportedState(goog.ui.Component.State.CHECKED));
+  return element;
+};
+
+
+/** @override */
+goog.ui.MenuItemRenderer.prototype.getContentElement = function(element) {
+  return /** @type {Element} */ (element && element.firstChild);
+};
+
+
+/**
+ * Overrides {@link goog.ui.ControlRenderer#decorate} by initializing the
+ * menu item to checkable based on whether the element to be decorated has
+ * extra stying indicating that it should be.
+ * @param {goog.ui.Control} item Menu item instance to decorate the element.
+ * @param {Element} element Element to decorate.
+ * @return {Element} Decorated element.
+ * @override
+ */
+goog.ui.MenuItemRenderer.prototype.decorate = function(item, element) {
+  if (!this.hasContentStructure(element)) {
+    element.appendChild(
+        this.createContent(element.childNodes, item.getDomHelper()));
+  }
+  if (goog.dom.classes.has(element, goog.getCssName('goog-option'))) {
+    item.setCheckable(true);
+    this.setCheckable(item, element, true);
+  }
+  return goog.ui.MenuItemRenderer.superClass_.decorate.call(this, item,
+      element);
+};
+
+
+/**
+ * Takes a menu item's root element, and sets its content to the given text
+ * caption or DOM structure.  Overrides the superclass immplementation by
+ * making sure that the checkbox structure (for selectable/checkable menu
+ * items) is preserved.
+ * @param {Element} element The item's root element.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure to be
+ *     set as the item's content.
+ * @override
+ */
+goog.ui.MenuItemRenderer.prototype.setContent = function(element, content) {
+  // Save the checkbox element, if present.
+  var contentElement = this.getContentElement(element);
+  var checkBoxElement = this.hasCheckBoxStructure(element) ?
+      contentElement.firstChild : null;
+  goog.ui.MenuItemRenderer.superClass_.setContent.call(this, element, content);
+  if (checkBoxElement && !this.hasCheckBoxStructure(element)) {
+    // The call to setContent() blew away the checkbox element; reattach it.
+    contentElement.insertBefore(checkBoxElement,
+        contentElement.firstChild || null);
+  }
+};
+
+
+/**
+ * Returns true if the element appears to have a proper menu item structure by
+ * checking whether its first child has the appropriate structural class name.
+ * @param {Element} element Element to check.
+ * @return {boolean} Whether the element appears to have a proper menu item DOM.
+ * @protected
+ */
+goog.ui.MenuItemRenderer.prototype.hasContentStructure = function(element) {
+  var child = goog.dom.getFirstElementChild(element);
+  var contentClassName = this.getCompositeCssClass_(
+      goog.ui.MenuItemRenderer.CompositeCssClassIndex_.CONTENT);
+  return !!child && goog.dom.classes.has(child, contentClassName);
+};
+
+
+/**
+ * Wraps the given text caption or existing DOM node(s) in a structural element
+ * containing the menu item's contents.
+ * @param {goog.ui.ControlContent} content Menu item contents.
+ * @param {goog.dom.DomHelper} dom DOM helper for document interaction.
+ * @return {Element} Menu item content element.
+ * @protected
+ */
+goog.ui.MenuItemRenderer.prototype.createContent = function(content, dom) {
+  var contentClassName = this.getCompositeCssClass_(
+      goog.ui.MenuItemRenderer.CompositeCssClassIndex_.CONTENT);
+  return dom.createDom('div', contentClassName, content);
+};
+
+
+/**
+ * Enables/disables radio button semantics on the menu item.
+ * @param {goog.ui.Control} item Menu item to update.
+ * @param {Element} element Menu item element to update (may be null if the
+ *     item hasn't been rendered yet).
+ * @param {boolean} selectable Whether the item should be selectable.
+ */
+goog.ui.MenuItemRenderer.prototype.setSelectable = function(item, element,
+    selectable) {
+  if (element) {
+    goog.dom.a11y.setRole(element, selectable ?
+        goog.dom.a11y.Role.MENU_ITEM_RADIO :
+        /** @type {string} */ (this.getAriaRole()));
+    this.setEnableCheckBoxStructure(item, element, selectable);
+  }
+};
+
+
+/**
+ * Enables/disables checkbox semantics on the menu item.
+ * @param {goog.ui.Control} item Menu item to update.
+ * @param {Element} element Menu item element to update (may be null if the
+ *     item hasn't been rendered yet).
+ * @param {boolean} checkable Whether the item should be checkable.
+ */
+goog.ui.MenuItemRenderer.prototype.setCheckable = function(item, element,
+    checkable) {
+  if (element) {
+    goog.dom.a11y.setRole(element, checkable ?
+        goog.dom.a11y.Role.MENU_ITEM_CHECKBOX :
+        /** @type {string} */ (this.getAriaRole()));
+    this.setEnableCheckBoxStructure(item, element, checkable);
+  }
+};
+
+
+/**
+ * Determines whether the item contains a checkbox element.
+ * @param {Element} element Menu item root element.
+ * @return {boolean} Whether the element contains a checkbox element.
+ * @protected
+ */
+goog.ui.MenuItemRenderer.prototype.hasCheckBoxStructure = function(element) {
+  var contentElement = this.getContentElement(element);
+  if (contentElement) {
+    var child = contentElement.firstChild;
+    var checkboxClassName = this.getCompositeCssClass_(
+        goog.ui.MenuItemRenderer.CompositeCssClassIndex_.CHECKBOX);
+    return !!child && goog.dom.classes.has(child, checkboxClassName);
+  }
+  return false;
+};
+
+
+/**
+ * Adds or removes extra markup and CSS styling to the menu item to make it
+ * selectable or non-selectable, depending on the value of the
+ * {@code selectable} argument.
+ * @param {goog.ui.Control} item Menu item to update.
+ * @param {Element} element Menu item element to update.
+ * @param {boolean} enable Whether to add or remove the checkbox structure.
+ * @protected
+ */
+goog.ui.MenuItemRenderer.prototype.setEnableCheckBoxStructure = function(item,
+    element, enable) {
+  if (enable != this.hasCheckBoxStructure(element)) {
+    goog.dom.classes.enable(element, goog.getCssName('goog-option'), enable);
+    var contentElement = this.getContentElement(element);
+    if (enable) {
+      // Insert checkbox structure.
+      var checkboxClassName = this.getCompositeCssClass_(
+          goog.ui.MenuItemRenderer.CompositeCssClassIndex_.CHECKBOX);
+      contentElement.insertBefore(
+          item.getDomHelper().createDom('div', checkboxClassName),
+          contentElement.firstChild || null);
+    } else {
+      // Remove checkbox structure.
+      contentElement.removeChild(contentElement.firstChild);
+    }
+  }
+};
+
+
+/**
+ * Takes a single {@link goog.ui.Component.State}, and returns the
+ * corresponding CSS class name (null if none).  Overrides the superclass
+ * implementation by using 'highlight' as opposed to 'hover' as the CSS
+ * class name suffix for the HOVER state, for backwards compatibility.
+ * @param {goog.ui.Component.State} state Component state.
+ * @return {string|undefined} CSS class representing the given state
+ *     (undefined if none).
+ * @override
+ */
+goog.ui.MenuItemRenderer.prototype.getClassForState = function(state) {
+  switch (state) {
+    case goog.ui.Component.State.HOVER:
+      // We use 'highlight' as the suffix, for backwards compatibility.
+      return this.getCompositeCssClass_(
+          goog.ui.MenuItemRenderer.CompositeCssClassIndex_.HOVER);
+    case goog.ui.Component.State.CHECKED:
+    case goog.ui.Component.State.SELECTED:
+    // We use 'goog-option-selected' as the class, for backwards compatibility.
+      return goog.getCssName('goog-option-selected');
+    default:
+      return goog.ui.MenuItemRenderer.superClass_.getClassForState.call(this,
+          state);
+  }
+};
+
+
+/**
+ * Takes a single CSS class name which may represent a component state, and
+ * returns the corresponding component state (0x00 if none).  Overrides the
+ * superclass implementation by treating 'goog-option-selected' as special,
+ * for backwards compatibility.
+ * @param {string} className CSS class name, possibly representing a component
+ *     state.
+ * @return {goog.ui.Component.State} state Component state corresponding
+ *     to the given CSS class (0x00 if none).
+ * @override
+ */
+goog.ui.MenuItemRenderer.prototype.getStateFromClass = function(className) {
+  var hoverClassName = this.getCompositeCssClass_(
+      goog.ui.MenuItemRenderer.CompositeCssClassIndex_.HOVER);
+  switch (className) {
+    case goog.getCssName('goog-option-selected'):
+      return goog.ui.Component.State.CHECKED;
+    case hoverClassName:
+      return goog.ui.Component.State.HOVER;
+    default:
+      return goog.ui.MenuItemRenderer.superClass_.getStateFromClass.call(this,
+          className);
+  }
+};
+
+
+/** @override */
+goog.ui.MenuItemRenderer.prototype.getCssClass = function() {
+  return goog.ui.MenuItemRenderer.CSS_CLASS;
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A class for representing items in menus.
+ * @see goog.ui.Menu
+ *
+ * @see ../demos/menuitem.html
+ */
+
+goog.provide('goog.ui.MenuItem');
+
+goog.require('goog.array');
+goog.require('goog.dom');
+goog.require('goog.dom.classes');
+goog.require('goog.events.KeyCodes');
+goog.require('goog.math.Coordinate');
+goog.require('goog.string');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.Control');
+goog.require('goog.ui.ControlContent');
+goog.require('goog.ui.MenuItemRenderer');
+goog.require('goog.ui.registry');
+
+
+
+/**
+ * Class representing an item in a menu.
+ *
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure to
+ *     display as the content of the item (use to add icons or styling to
+ *     menus).
+ * @param {*=} opt_model Data/model associated with the menu item.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper used for
+ *     document interactions.
+ * @param {goog.ui.MenuItemRenderer=} opt_renderer Optional renderer.
+ * @constructor
+ * @extends {goog.ui.Control}
+ */
+goog.ui.MenuItem = function(content, opt_model, opt_domHelper, opt_renderer) {
+  goog.ui.Control.call(this, content, opt_renderer ||
+      goog.ui.MenuItemRenderer.getInstance(), opt_domHelper);
+  this.setValue(opt_model);
+};
+goog.inherits(goog.ui.MenuItem, goog.ui.Control);
+
+
+/**
+ * The access key for this menu item. This key allows the user to quickly
+ * trigger this item's action with they keyboard. For example, setting the
+ * mnenomic key to 70 (F), when the user opens the menu and hits "F," the
+ * menu item is triggered.
+ *
+ * @type {goog.events.KeyCodes}
+ * @private
+ */
+goog.ui.MenuItem.mnemonicKey_;
+
+
+/**
+ * The class set on an element that contains a parenthetical mnemonic key hint.
+ * Parenthetical hints are added to items in which the mnemonic key is not found
+ * within the menu item's caption itself. For example, if you have a menu item
+ * with the caption "Record," but its mnemonic key is "I", the caption displayed
+ * in the menu will appear as "Record (I)".
+ *
+ * @type {string}
+ * @private
+ */
+goog.ui.MenuItem.MNEMONIC_WRAPPER_CLASS_ =
+    goog.getCssName('goog-menuitem-mnemonic-separator');
+
+
+/**
+ * The class set on an element that contains a keyboard accelerator hint.
+ * @type {string}
+ * @private
+ */
+goog.ui.MenuItem.ACCELERATOR_CLASS_ = goog.getCssName('goog-menuitem-accel');
+
+
+// goog.ui.Component and goog.ui.Control implementation.
+
+
+/**
+ * Returns the value associated with the menu item.  The default implementation
+ * returns the model object associated with the item (if any), or its caption.
+ * @return {*} Value associated with the menu item, if any, or its caption.
+ */
+goog.ui.MenuItem.prototype.getValue = function() {
+  var model = this.getModel();
+  return model != null ? model : this.getCaption();
+};
+
+
+/**
+ * Sets the value associated with the menu item.  The default implementation
+ * stores the value as the model of the menu item.
+ * @param {*} value Value to be associated with the menu item.
+ */
+goog.ui.MenuItem.prototype.setValue = function(value) {
+  this.setModel(value);
+};
+
+
+/**
+ * Sets the menu item to be selectable or not.  Set to true for menu items
+ * that represent selectable options.
+ * @param {boolean} selectable Whether the menu item is selectable.
+ */
+goog.ui.MenuItem.prototype.setSelectable = function(selectable) {
+  this.setSupportedState(goog.ui.Component.State.SELECTED, selectable);
+  if (this.isChecked() && !selectable) {
+    this.setChecked(false);
+  }
+
+  var element = this.getElement();
+  if (element) {
+    this.getRenderer().setSelectable(this, element, selectable);
+  }
+};
+
+
+/**
+ * Sets the menu item to be checkable or not.  Set to true for menu items
+ * that represent checkable options.
+ * @param {boolean} checkable Whether the menu item is checkable.
+ */
+goog.ui.MenuItem.prototype.setCheckable = function(checkable) {
+  this.setSupportedState(goog.ui.Component.State.CHECKED, checkable);
+
+  var element = this.getElement();
+  if (element) {
+    this.getRenderer().setCheckable(this, element, checkable);
+  }
+};
+
+
+/**
+ * Returns the text caption of the component while ignoring accelerators.
+ * @override
+ */
+goog.ui.MenuItem.prototype.getCaption = function() {
+  var content = this.getContent();
+  if (goog.isArray(content)) {
+    var acceleratorClass = goog.ui.MenuItem.ACCELERATOR_CLASS_;
+    var mnemonicWrapClass = goog.ui.MenuItem.MNEMONIC_WRAPPER_CLASS_;
+    var caption = goog.array.map(content, function(node) {
+      var classes = goog.dom.classes.get(node);
+      if (goog.array.contains(classes, acceleratorClass) ||
+          goog.array.contains(classes, mnemonicWrapClass)) {
+        return '';
+      } else {
+        return goog.dom.getRawTextContent(node);
+      }
+    }).join('');
+    return goog.string.collapseBreakingSpaces(caption);
+  }
+  return goog.ui.MenuItem.superClass_.getCaption.call(this);
+};
+
+
+/** @override */
+goog.ui.MenuItem.prototype.handleMouseUp = function(e) {
+  var parentMenu = /** @type {goog.ui.Menu} */ (this.getParent());
+
+  if (parentMenu) {
+    var oldCoords = parentMenu.openingCoords;
+    // Clear out the saved opening coords immediately so they're not used twice.
+    parentMenu.openingCoords = null;
+
+    if (oldCoords && goog.isNumber(e.clientX)) {
+      var newCoords = new goog.math.Coordinate(e.clientX, e.clientY);
+      if (goog.math.Coordinate.equals(oldCoords, newCoords)) {
+        // This menu was opened by a mousedown and we're handling the consequent
+        // mouseup. The coords haven't changed, meaning this was a simple click,
+        // not a click and drag. Don't do the usual behavior because the menu
+        // just popped up under the mouse and the user didn't mean to activate
+        // this item.
+        return;
+      }
+    }
+  }
+
+  goog.base(this, 'handleMouseUp', e);
+};
+
+
+/** @override */
+goog.ui.MenuItem.prototype.handleKeyEventInternal = function(e) {
+  if (e.keyCode == this.getMnemonic() && this.performActionInternal(e)) {
+    return true;
+  } else {
+    return goog.base(this, 'handleKeyEventInternal', e);
+  }
+};
+
+
+/**
+ * Sets the mnemonic key code. The mnemonic is the key associated with this
+ * action.
+ * @param {goog.events.KeyCodes} key The key code.
+ */
+goog.ui.MenuItem.prototype.setMnemonic = function(key) {
+  this.mnemonicKey_ = key;
+};
+
+
+/**
+ * Gets the mnemonic key code. The mnemonic is the key associated with this
+ * action.
+ * @return {goog.events.KeyCodes} The key code of the mnemonic key.
+ */
+goog.ui.MenuItem.prototype.getMnemonic = function() {
+  return this.mnemonicKey_;
+};
+
+
+// Register a decorator factory function for goog.ui.MenuItems.
+goog.ui.registry.setDecoratorByClassName(goog.ui.MenuItemRenderer.CSS_CLASS,
+    function() {
+      // MenuItem defaults to using MenuItemRenderer.
+      return new goog.ui.MenuItem(null);
+    });
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Base class for containers that host {@link goog.ui.Control}s,
+ * such as menus and toolbars.  Provides default keyboard and mouse event
+ * handling and child management, based on a generalized version of
+ * {@link goog.ui.Menu}.
+ *
+ * @author attila@google.com (Attila Bodis)
+ * @see ../demos/container.html
+ */
+// TODO(attila):  Fix code/logic duplication between this and goog.ui.Control.
+// TODO(attila):  Maybe pull common stuff all the way up into Component...?
+
+goog.provide('goog.ui.Container');
+goog.provide('goog.ui.Container.EventType');
+goog.provide('goog.ui.Container.Orientation');
+
+goog.require('goog.dom');
+goog.require('goog.dom.a11y');
+goog.require('goog.dom.a11y.State');
+goog.require('goog.events.EventType');
+goog.require('goog.events.KeyCodes');
+goog.require('goog.events.KeyHandler');
+goog.require('goog.events.KeyHandler.EventType');
+goog.require('goog.style');
+goog.require('goog.ui.Component');
+goog.require('goog.ui.Component.Error');
+goog.require('goog.ui.Component.EventType');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.ContainerRenderer');
+
+
+
+/**
+ * Base class for containers.  Extends {@link goog.ui.Component} by adding
+ * the following:
+ *  <ul>
+ *    <li>a {@link goog.events.KeyHandler}, to simplify keyboard handling,
+ *    <li>a pluggable <em>renderer</em> framework, to simplify the creation of
+ *        containers without the need to subclass this class,
+ *    <li>methods to manage child controls hosted in the container,
+ *    <li>default mouse and keyboard event handling methods.
+ *  </ul>
+ * @param {?goog.ui.Container.Orientation=} opt_orientation Container
+ *     orientation; defaults to {@code VERTICAL}.
+ * @param {goog.ui.ContainerRenderer=} opt_renderer Renderer used to render or
+ *     decorate the container; defaults to {@link goog.ui.ContainerRenderer}.
+ * @param {goog.dom.DomHelper=} opt_domHelper DOM helper, used for document
+ *     interaction.
+ * @extends {goog.ui.Component}
+ * @constructor
+ */
+goog.ui.Container = function(opt_orientation, opt_renderer, opt_domHelper) {
+  goog.ui.Component.call(this, opt_domHelper);
+  this.renderer_ = opt_renderer || goog.ui.ContainerRenderer.getInstance();
+  this.orientation_ = opt_orientation || this.renderer_.getDefaultOrientation();
+};
+goog.inherits(goog.ui.Container, goog.ui.Component);
+
+
+/**
+ * Container-specific events.
+ * @enum {string}
+ */
+goog.ui.Container.EventType = {
+  /**
+   * Dispatched after a goog.ui.Container becomes visible. Non-cancellable.
+   * NOTE(user): This event really shouldn't exist, because the
+   * goog.ui.Component.EventType.SHOW event should behave like this one. But the
+   * SHOW event for containers has been behaving as other components'
+   * BEFORE_SHOW event for a long time, and too much code relies on that old
+   * behavior to fix it now.
+   */
+  AFTER_SHOW: 'aftershow',
+
+  /**
+   * Dispatched after a goog.ui.Container becomes invisible. Non-cancellable.
+   */
+  AFTER_HIDE: 'afterhide'
+};
+
+
+/**
+ * Container orientation constants.
+ * @enum {string}
+ */
+goog.ui.Container.Orientation = {
+  HORIZONTAL: 'horizontal',
+  VERTICAL: 'vertical'
+};
+
+
+/**
+ * Allows an alternative element to be set to receive key events, otherwise
+ * defers to the renderer's element choice.
+ * @type {Element|undefined}
+ * @private
+ */
+goog.ui.Container.prototype.keyEventTarget_ = null;
+
+
+/**
+ * Keyboard event handler.
+ * @type {goog.events.KeyHandler?}
+ * @private
+ */
+goog.ui.Container.prototype.keyHandler_ = null;
+
+
+/**
+ * Renderer for the container.  Defaults to {@link goog.ui.ContainerRenderer}.
+ * @type {goog.ui.ContainerRenderer?}
+ * @private
+ */
+goog.ui.Container.prototype.renderer_ = null;
+
+
+/**
+ * Container orientation; determines layout and default keyboard navigation.
+ * @type {?goog.ui.Container.Orientation}
+ * @private
+ */
+goog.ui.Container.prototype.orientation_ = null;
+
+
+/**
+ * Whether the container is set to be visible.  Defaults to true.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Container.prototype.visible_ = true;
+
+
+/**
+ * Whether the container is enabled and reacting to keyboard and mouse events.
+ * Defaults to true.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Container.prototype.enabled_ = true;
+
+
+/**
+ * Whether the container supports keyboard focus.  Defaults to true.  Focusable
+ * containers have a {@code tabIndex} and can be navigated to via the keyboard.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Container.prototype.focusable_ = true;
+
+
+/**
+ * The 0-based index of the currently highlighted control in the container
+ * (-1 if none).
+ * @type {number}
+ * @private
+ */
+goog.ui.Container.prototype.highlightedIndex_ = -1;
+
+
+/**
+ * The currently open (expanded) control in the container (null if none).
+ * @type {goog.ui.Control?}
+ * @private
+ */
+goog.ui.Container.prototype.openItem_ = null;
+
+
+/**
+ * Whether the mouse button is held down.  Defaults to false.  This flag is set
+ * when the user mouses down over the container, and remains set until they
+ * release the mouse button.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Container.prototype.mouseButtonPressed_ = false;
+
+
+/**
+ * Whether focus of child components should be allowed.  Only effective if
+ * focusable_ is set to false.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Container.prototype.allowFocusableChildren_ = false;
+
+
+/**
+ * Whether highlighting a child component should also open it.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Container.prototype.openFollowsHighlight_ = true;
+
+
+/**
+ * Map of DOM IDs to child controls.  Each key is the DOM ID of a child
+ * control's root element; each value is a reference to the child control
+ * itself.  Used for looking up the child control corresponding to a DOM
+ * node in O(1) time.
+ * @type {Object}
+ * @private
+ */
+goog.ui.Container.prototype.childElementIdMap_ = null;
+
+
+// Event handler and renderer management.
+
+
+/**
+ * Returns the DOM element on which the container is listening for keyboard
+ * events (null if none).
+ * @return {Element} Element on which the container is listening for key
+ *     events.
+ */
+goog.ui.Container.prototype.getKeyEventTarget = function() {
+  // Delegate to renderer, unless we've set an explicit target.
+  return this.keyEventTarget_ || this.renderer_.getKeyEventTarget(this);
+};
+
+
+/**
+ * Attaches an element on which to listen for key events.
+ * @param {Element|undefined} element The element to attach, or null/undefined
+ *     to attach to the default element.
+ */
+goog.ui.Container.prototype.setKeyEventTarget = function(element) {
+  if (this.focusable_) {
+    var oldTarget = this.getKeyEventTarget();
+    var inDocument = this.isInDocument();
+
+    this.keyEventTarget_ = element;
+    var newTarget = this.getKeyEventTarget();
+
+    if (inDocument) {
+      // Unlisten for events on the old key target.  Requires us to reset
+      // key target state temporarily.
+      this.keyEventTarget_ = oldTarget;
+      this.enableFocusHandling_(false);
+      this.keyEventTarget_ = element;
+
+      // Listen for events on the new key target.
+      this.getKeyHandler().attach(newTarget);
+      this.enableFocusHandling_(true);
+    }
+  } else {
+    throw Error('Can\'t set key event target for container ' +
+        'that doesn\'t support keyboard focus!');
+  }
+};
+
+
+/**
+ * Returns the keyboard event handler for this container, lazily created the
+ * first time this method is called.  The keyboard event handler listens for
+ * keyboard events on the container's key event target, as determined by its
+ * renderer.
+ * @return {goog.events.KeyHandler} Keyboard event handler for this container.
+ */
+goog.ui.Container.prototype.getKeyHandler = function() {
+  return this.keyHandler_ ||
+      (this.keyHandler_ = new goog.events.KeyHandler(this.getKeyEventTarget()));
+};
+
+
+/**
+ * Returns the renderer used by this container to render itself or to decorate
+ * an existing element.
+ * @return {goog.ui.ContainerRenderer} Renderer used by the container.
+ */
+goog.ui.Container.prototype.getRenderer = function() {
+  return this.renderer_;
+};
+
+
+/**
+ * Registers the given renderer with the container.  Changing renderers after
+ * the container has already been rendered or decorated is an error.
+ * @param {goog.ui.ContainerRenderer} renderer Renderer used by the container.
+ */
+goog.ui.Container.prototype.setRenderer = function(renderer) {
+  if (this.getElement()) {
+    // Too late.
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+
+  this.renderer_ = renderer;
+};
+
+
+// Standard goog.ui.Component implementation.
+
+
+/**
+ * Creates the container's DOM.
+ * @override
+ */
+goog.ui.Container.prototype.createDom = function() {
+  // Delegate to renderer.
+  this.setElementInternal(this.renderer_.createDom(this));
+};
+
+
+/**
+ * Returns the DOM element into which child components are to be rendered,
+ * or null if the container itself hasn't been rendered yet.  Overrides
+ * {@link goog.ui.Component#getContentElement} by delegating to the renderer.
+ * @return {Element} Element to contain child elements (null if none).
+ * @override
+ */
+goog.ui.Container.prototype.getContentElement = function() {
+  // Delegate to renderer.
+  return this.renderer_.getContentElement(this.getElement());
+};
+
+
+/**
+ * Returns true if the given element can be decorated by this container.
+ * Overrides {@link goog.ui.Component#canDecorate}.
+ * @param {Element} element Element to decorate.
+ * @return {boolean} True iff the element can be decorated.
+ * @override
+ */
+goog.ui.Container.prototype.canDecorate = function(element) {
+  // Delegate to renderer.
+  return this.renderer_.canDecorate(element);
+};
+
+
+/**
+ * Decorates the given element with this container. Overrides {@link
+ * goog.ui.Component#decorateInternal}.  Considered protected.
+ * @param {Element} element Element to decorate.
+ * @override
+ */
+goog.ui.Container.prototype.decorateInternal = function(element) {
+  // Delegate to renderer.
+  this.setElementInternal(this.renderer_.decorate(this, element));
+  // Check whether the decorated element is explicitly styled to be invisible.
+  if (element.style.display == 'none') {
+    this.visible_ = false;
+  }
+};
+
+
+/**
+ * Configures the container after its DOM has been rendered, and sets up event
+ * handling.  Overrides {@link goog.ui.Component#enterDocument}.
+ * @override
+ */
+goog.ui.Container.prototype.enterDocument = function() {
+  goog.ui.Container.superClass_.enterDocument.call(this);
+
+  this.forEachChild(function(child) {
+    if (child.isInDocument()) {
+      this.registerChildId_(child);
+    }
+  }, this);
+
+  var elem = this.getElement();
+
+  // Call the renderer's initializeDom method to initialize the container's DOM.
+  this.renderer_.initializeDom(this);
+
+  // Initialize visibility (opt_force = true, so we don't dispatch events).
+  this.setVisible(this.visible_, true);
+
+  // Handle events dispatched by child controls.
+  this.getHandler().
+      listen(this, goog.ui.Component.EventType.ENTER,
+          this.handleEnterItem).
+      listen(this, goog.ui.Component.EventType.HIGHLIGHT,
+          this.handleHighlightItem).
+      listen(this, goog.ui.Component.EventType.UNHIGHLIGHT,
+          this.handleUnHighlightItem).
+      listen(this, goog.ui.Component.EventType.OPEN, this.handleOpenItem).
+      listen(this, goog.ui.Component.EventType.CLOSE, this.handleCloseItem).
+
+      // Handle mouse events.
+      listen(elem, goog.events.EventType.MOUSEDOWN, this.handleMouseDown).
+      listen(goog.dom.getOwnerDocument(elem), goog.events.EventType.MOUSEUP,
+          this.handleDocumentMouseUp).
+
+      // Handle mouse events on behalf of controls in the container.
+      listen(elem, [
+        goog.events.EventType.MOUSEDOWN,
+        goog.events.EventType.MOUSEUP,
+        goog.events.EventType.MOUSEOVER,
+        goog.events.EventType.MOUSEOUT,
+        goog.events.EventType.CONTEXTMENU
+      ], this.handleChildMouseEvents);
+
+  // If the container is focusable, set up keyboard event handling.
+  if (this.isFocusable()) {
+    this.enableFocusHandling_(true);
+  }
+};
+
+
+/**
+ * Sets up listening for events applicable to focusable containers.
+ * @param {boolean} enable Whether to enable or disable focus handling.
+ * @private
+ */
+goog.ui.Container.prototype.enableFocusHandling_ = function(enable) {
+  var handler = this.getHandler();
+  var keyTarget = this.getKeyEventTarget();
+  if (enable) {
+    handler.
+        listen(keyTarget, goog.events.EventType.FOCUS, this.handleFocus).
+        listen(keyTarget, goog.events.EventType.BLUR, this.handleBlur).
+        listen(this.getKeyHandler(), goog.events.KeyHandler.EventType.KEY,
+            this.handleKeyEvent);
+  } else {
+    handler.
+        unlisten(keyTarget, goog.events.EventType.FOCUS, this.handleFocus).
+        unlisten(keyTarget, goog.events.EventType.BLUR, this.handleBlur).
+        unlisten(this.getKeyHandler(), goog.events.KeyHandler.EventType.KEY,
+            this.handleKeyEvent);
+  }
+};
+
+
+/**
+ * Cleans up the container before its DOM is removed from the document, and
+ * removes event handlers.  Overrides {@link goog.ui.Component#exitDocument}.
+ * @override
+ */
+goog.ui.Container.prototype.exitDocument = function() {
+  // {@link #setHighlightedIndex} has to be called before
+  // {@link goog.ui.Component#exitDocument}, otherwise it has no effect.
+  this.setHighlightedIndex(-1);
+
+  if (this.openItem_) {
+    this.openItem_.setOpen(false);
+  }
+
+  this.mouseButtonPressed_ = false;
+
+  goog.ui.Container.superClass_.exitDocument.call(this);
+};
+
+
+/** @override */
+goog.ui.Container.prototype.disposeInternal = function() {
+  goog.ui.Container.superClass_.disposeInternal.call(this);
+
+  if (this.keyHandler_) {
+    this.keyHandler_.dispose();
+    this.keyHandler_ = null;
+  }
+
+  this.keyEventTarget_ = null;
+  this.childElementIdMap_ = null;
+  this.openItem_ = null;
+  this.renderer_ = null;
+};
+
+
+// Default event handlers.
+
+
+/**
+ * Handles ENTER events raised by child controls when they are navigated to.
+ * @param {goog.events.Event} e ENTER event to handle.
+ * @return {boolean} Whether to prevent handleMouseOver from handling
+ *    the event.
+ */
+goog.ui.Container.prototype.handleEnterItem = function(e) {
+  // Allow the Control to highlight itself.
+  return true;
+};
+
+
+/**
+ * Handles HIGHLIGHT events dispatched by items in the container when
+ * they are highlighted.
+ * @param {goog.events.Event} e Highlight event to handle.
+ */
+goog.ui.Container.prototype.handleHighlightItem = function(e) {
+  var index = this.indexOfChild(/** @type {goog.ui.Control} */ (e.target));
+  if (index > -1 && index != this.highlightedIndex_) {
+    var item = this.getHighlighted();
+    if (item) {
+      // Un-highlight previously highlighted item.
+      item.setHighlighted(false);
+    }
+
+    this.highlightedIndex_ = index;
+    item = this.getHighlighted();
+
+    if (this.isMouseButtonPressed()) {
+      // Activate item when mouse button is pressed, to allow MacOS-style
+      // dragging to choose menu items.  Although this should only truly
+      // happen if the highlight is due to mouse movements, there is little
+      // harm in doing it for keyboard or programmatic highlights.
+      item.setActive(true);
+    }
+
+    // Update open item if open item needs follow highlight.
+    if (this.openFollowsHighlight_ &&
+        this.openItem_ && item != this.openItem_) {
+      if (item.isSupportedState(goog.ui.Component.State.OPENED)) {
+        item.setOpen(true);
+      } else {
+        this.openItem_.setOpen(false);
+      }
+    }
+  }
+  goog.dom.a11y.setState(this.getElement(),
+      goog.dom.a11y.State.ACTIVEDESCENDANT, e.target.getElement().id);
+};
+
+
+/**
+ * Handles UNHIGHLIGHT events dispatched by items in the container when
+ * they are unhighlighted.
+ * @param {goog.events.Event} e Unhighlight event to handle.
+ */
+goog.ui.Container.prototype.handleUnHighlightItem = function(e) {
+  if (e.target == this.getHighlighted()) {
+    this.highlightedIndex_ = -1;
+  }
+  goog.dom.a11y.setState(this.getElement(),
+      goog.dom.a11y.State.ACTIVEDESCENDANT, '');
+};
+
+
+/**
+ * Handles OPEN events dispatched by items in the container when they are
+ * opened.
+ * @param {goog.events.Event} e Open event to handle.
+ */
+goog.ui.Container.prototype.handleOpenItem = function(e) {
+  var item = /** @type {goog.ui.Control} */ (e.target);
+  if (item && item != this.openItem_ && item.getParent() == this) {
+    if (this.openItem_) {
+      this.openItem_.setOpen(false);
+    }
+    this.openItem_ = item;
+  }
+};
+
+
+/**
+ * Handles CLOSE events dispatched by items in the container when they are
+ * closed.
+ * @param {goog.events.Event} e Close event to handle.
+ */
+goog.ui.Container.prototype.handleCloseItem = function(e) {
+  if (e.target == this.openItem_) {
+    this.openItem_ = null;
+  }
+};
+
+
+/**
+ * Handles mousedown events over the container.  The default implementation
+ * sets the "mouse button pressed" flag and, if the container is focusable,
+ * grabs keyboard focus.
+ * @param {goog.events.BrowserEvent} e Mousedown event to handle.
+ */
+goog.ui.Container.prototype.handleMouseDown = function(e) {
+  if (this.enabled_) {
+    this.setMouseButtonPressed(true);
+  }
+
+  var keyTarget = this.getKeyEventTarget();
+  if (keyTarget && goog.dom.isFocusableTabIndex(keyTarget)) {
+    // The container is configured to receive keyboard focus.
+    keyTarget.focus();
+  } else {
+    // The control isn't configured to receive keyboard focus; prevent it
+    // from stealing focus or destroying the selection.
+    e.preventDefault();
+  }
+};
+
+
+/**
+ * Handles mouseup events over the document.  The default implementation
+ * clears the "mouse button pressed" flag.
+ * @param {goog.events.BrowserEvent} e Mouseup event to handle.
+ */
+goog.ui.Container.prototype.handleDocumentMouseUp = function(e) {
+  this.setMouseButtonPressed(false);
+};
+
+
+/**
+ * Handles mouse events originating from nodes belonging to the controls hosted
+ * in the container.  Locates the child control based on the DOM node that
+ * dispatched the event, and forwards the event to the control for handling.
+ * @param {goog.events.BrowserEvent} e Mouse event to handle.
+ */
+goog.ui.Container.prototype.handleChildMouseEvents = function(e) {
+  var control = this.getOwnerControl(/** @type {Node} */ (e.target));
+  if (control) {
+    // Child control identified; forward the event.
+    switch (e.type) {
+      case goog.events.EventType.MOUSEDOWN:
+        control.handleMouseDown(e);
+        break;
+      case goog.events.EventType.MOUSEUP:
+        control.handleMouseUp(e);
+        break;
+      case goog.events.EventType.MOUSEOVER:
+        control.handleMouseOver(e);
+        break;
+      case goog.events.EventType.MOUSEOUT:
+        control.handleMouseOut(e);
+        break;
+      case goog.events.EventType.CONTEXTMENU:
+        control.handleContextMenu(e);
+        break;
+    }
+  }
+};
+
+
+/**
+ * Returns the child control that owns the given DOM node, or null if no such
+ * control is found.
+ * @param {Node} node DOM node whose owner is to be returned.
+ * @return {goog.ui.Control?} Control hosted in the container to which the node
+ *     belongs (if found).
+ * @protected
+ */
+goog.ui.Container.prototype.getOwnerControl = function(node) {
+  // Ensure that this container actually has child controls before
+  // looking up the owner.
+  if (this.childElementIdMap_) {
+    var elem = this.getElement();
+    // See http://b/2964418 . IE9 appears to evaluate '!=' incorrectly, so
+    // using '!==' instead.
+    // TODO(user): Possibly revert this change if/when IE9 fixes the issue.
+    while (node && node !== elem) {
+      var id = node.id;
+      if (id in this.childElementIdMap_) {
+        return this.childElementIdMap_[id];
+      }
+      node = node.parentNode;
+    }
+  }
+  return null;
+};
+
+
+/**
+ * Handles focus events raised when the container's key event target receives
+ * keyboard focus.
+ * @param {goog.events.BrowserEvent} e Focus event to handle.
+ */
+goog.ui.Container.prototype.handleFocus = function(e) {
+  // No-op in the base class.
+};
+
+
+/**
+ * Handles blur events raised when the container's key event target loses
+ * keyboard focus.  The default implementation clears the highlight index.
+ * @param {goog.events.BrowserEvent} e Blur event to handle.
+ */
+goog.ui.Container.prototype.handleBlur = function(e) {
+  this.setHighlightedIndex(-1);
+  this.setMouseButtonPressed(false);
+  // If the container loses focus, and one of its children is open, close it.
+  if (this.openItem_) {
+    this.openItem_.setOpen(false);
+  }
+};
+
+
+/**
+ * Attempts to handle a keyboard event, if the control is enabled, by calling
+ * {@link handleKeyEventInternal}.  Considered protected; should only be used
+ * within this package and by subclasses.
+ * @param {goog.events.KeyEvent} e Key event to handle.
+ * @return {boolean} Whether the key event was handled.
+ */
+goog.ui.Container.prototype.handleKeyEvent = function(e) {
+  if (this.isEnabled() && this.isVisible() &&
+      (this.getChildCount() != 0 || this.keyEventTarget_) &&
+      this.handleKeyEventInternal(e)) {
+    e.preventDefault();
+    e.stopPropagation();
+    return true;
+  }
+  return false;
+};
+
+
+/**
+ * Attempts to handle a keyboard event; returns true if the event was handled,
+ * false otherwise.  If the container is enabled, and a child is highlighted,
+ * calls the child control's {@code handleKeyEvent} method to give the control
+ * a chance to handle the event first.
+ * @param {goog.events.KeyEvent} e Key event to handle.
+ * @return {boolean} Whether the event was handled by the container (or one of
+ *     its children).
+ */
+goog.ui.Container.prototype.handleKeyEventInternal = function(e) {
+  // Give the highlighted control the chance to handle the key event.
+  var highlighted = this.getHighlighted();
+  if (highlighted && typeof highlighted.handleKeyEvent == 'function' &&
+      highlighted.handleKeyEvent(e)) {
+    return true;
+  }
+
+  // Give the open control the chance to handle the key event.
+  if (this.openItem_ && this.openItem_ != highlighted &&
+      typeof this.openItem_.handleKeyEvent == 'function' &&
+      this.openItem_.handleKeyEvent(e)) {
+    return true;
+  }
+
+  // Do not handle the key event if any modifier key is pressed.
+  if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) {
+    return false;
+  }
+
+  // Either nothing is highlighted, or the highlighted control didn't handle
+  // the key event, so attempt to handle it here.
+  switch (e.keyCode) {
+    case goog.events.KeyCodes.ESC:
+      if (this.isFocusable()) {
+        this.getKeyEventTarget().blur();
+      } else {
+        return false;
+      }
+      break;
+
+    case goog.events.KeyCodes.HOME:
+      this.highlightFirst();
+      break;
+
+    case goog.events.KeyCodes.END:
+      this.highlightLast();
+      break;
+
+    case goog.events.KeyCodes.UP:
+      if (this.orientation_ == goog.ui.Container.Orientation.VERTICAL) {
+        this.highlightPrevious();
+      } else {
+        return false;
+      }
+      break;
+
+    case goog.events.KeyCodes.LEFT:
+      if (this.orientation_ == goog.ui.Container.Orientation.HORIZONTAL) {
+        if (this.isRightToLeft()) {
+          this.highlightNext();
+        } else {
+          this.highlightPrevious();
+        }
+      } else {
+        return false;
+      }
+      break;
+
+    case goog.events.KeyCodes.DOWN:
+      if (this.orientation_ == goog.ui.Container.Orientation.VERTICAL) {
+        this.highlightNext();
+      } else {
+        return false;
+      }
+      break;
+
+    case goog.events.KeyCodes.RIGHT:
+      if (this.orientation_ == goog.ui.Container.Orientation.HORIZONTAL) {
+        if (this.isRightToLeft()) {
+          this.highlightPrevious();
+        } else {
+          this.highlightNext();
+        }
+      } else {
+        return false;
+      }
+      break;
+
+    default:
+      return false;
+  }
+
+  return true;
+};
+
+
+// Child component management.
+
+
+/**
+ * Creates a DOM ID for the child control and registers it to an internal
+ * hash table to be able to find it fast by id.
+ * @param {goog.ui.Component} child The child control. Its root element has
+ *     to be created yet.
+ * @private
+ */
+goog.ui.Container.prototype.registerChildId_ = function(child) {
+  // Map the DOM ID of the control's root element to the control itself.
+  var childElem = child.getElement();
+
+  // If the control's root element doesn't have a DOM ID assign one.
+  var id = childElem.id || (childElem.id = child.getId());
+
+  // Lazily create the child element ID map on first use.
+  if (!this.childElementIdMap_) {
+    this.childElementIdMap_ = {};
+  }
+  this.childElementIdMap_[id] = child;
+};
+
+
+/**
+ * Adds the specified control as the last child of this container.  See
+ * {@link goog.ui.Container#addChildAt} for detailed semantics.
+ * @param {goog.ui.Component} child The new child control.
+ * @param {boolean=} opt_render Whether the new child should be rendered
+ *     immediately after being added (defaults to false).
+ * @override
+ */
+goog.ui.Container.prototype.addChild = function(child, opt_render) {
+  goog.ui.Container.superClass_.addChild.call(this, child, opt_render);
+};
+
+
+/**
+ * Overrides {@link goog.ui.Container#getChild} to make it clear that it
+ * only returns {@link goog.ui.Control}s.
+ * @param {string} id Child component ID.
+ * @return {goog.ui.Control} The child with the given ID; null if none.
+ * @override
+ */
+goog.ui.Container.prototype.getChild;
+
+
+/**
+ * Overrides {@link goog.ui.Container#getChildAt} to make it clear that it
+ * only returns {@link goog.ui.Control}s.
+ * @param {number} index 0-based index.
+ * @return {goog.ui.Control} The child with the given ID; null if none.
+ * @override
+ */
+goog.ui.Container.prototype.getChildAt;
+
+
+/**
+ * Adds the control as a child of this container at the given 0-based index.
+ * Overrides {@link goog.ui.Component#addChildAt} by also updating the
+ * container's highlight index.  Since {@link goog.ui.Component#addChild} uses
+ * {@link #addChildAt} internally, we only need to override this method.
+ * @param {goog.ui.Component} control New child.
+ * @param {number} index Index at which the new child is to be added.
+ * @param {boolean=} opt_render Whether the new child should be rendered
+ *     immediately after being added (defaults to false).
+ * @override
+ */
+goog.ui.Container.prototype.addChildAt = function(control, index, opt_render) {
+  // Make sure the child control dispatches HIGHLIGHT, UNHIGHLIGHT, OPEN, and
+  // CLOSE events, and that it doesn't steal keyboard focus.
+  control.setDispatchTransitionEvents(goog.ui.Component.State.HOVER, true);
+  control.setDispatchTransitionEvents(goog.ui.Component.State.OPENED, true);
+  if (this.isFocusable() || !this.isFocusableChildrenAllowed()) {
+    control.setSupportedState(goog.ui.Component.State.FOCUSED, false);
+  }
+
+  // Disable mouse event handling by child controls.
+  control.setHandleMouseEvents(false);
+
+  // Let the superclass implementation do the work.
+  goog.ui.Container.superClass_.addChildAt.call(this, control, index,
+      opt_render);
+
+  if (control.isInDocument() && this.isInDocument()) {
+    this.registerChildId_(control);
+  }
+
+  // Update the highlight index, if needed.
+  if (index <= this.highlightedIndex_) {
+    this.highlightedIndex_++;
+  }
+};
+
+
+/**
+ * Removes a child control.  Overrides {@link goog.ui.Component#removeChild} by
+ * updating the highlight index.  Since {@link goog.ui.Component#removeChildAt}
+ * uses {@link #removeChild} internally, we only need to override this method.
+ * @param {string|goog.ui.Component} control The ID of the child to remove, or
+ *     the control itself.
+ * @param {boolean=} opt_unrender Whether to call {@code exitDocument} on the
+ *     removed control, and detach its DOM from the document (defaults to
+ *     false).
+ * @return {goog.ui.Control} The removed control, if any.
+ * @override
+ */
+goog.ui.Container.prototype.removeChild = function(control, opt_unrender) {
+  control = goog.isString(control) ? this.getChild(control) : control;
+
+  if (control) {
+    var index = this.indexOfChild(control);
+    if (index != -1) {
+      if (index == this.highlightedIndex_) {
+        control.setHighlighted(false);
+      } else if (index < this.highlightedIndex_) {
+        this.highlightedIndex_--;
+      }
+    }
+
+    // Remove the mapping from the child element ID map.
+    var childElem = control.getElement();
+    if (childElem && childElem.id && this.childElementIdMap_) {
+      goog.object.remove(this.childElementIdMap_, childElem.id);
+    }
+  }
+
+  control = /** @type {goog.ui.Control} */ (
+      goog.ui.Container.superClass_.removeChild.call(this, control,
+          opt_unrender));
+
+  // Re-enable mouse event handling (in case the control is reused elsewhere).
+  control.setHandleMouseEvents(true);
+
+  return control;
+};
+
+
+// Container state management.
+
+
+/**
+ * Returns the container's orientation.
+ * @return {?goog.ui.Container.Orientation} Container orientation.
+ */
+goog.ui.Container.prototype.getOrientation = function() {
+  return this.orientation_;
+};
+
+
+/**
+ * Sets the container's orientation.
+ * @param {goog.ui.Container.Orientation} orientation Container orientation.
+ */
+// TODO(attila): Do we need to support containers with dynamic orientation?
+goog.ui.Container.prototype.setOrientation = function(orientation) {
+  if (this.getElement()) {
+    // Too late.
+    throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+  }
+
+  this.orientation_ = orientation;
+};
+
+
+/**
+ * Returns true if the container's visibility is set to visible, false if
+ * it is set to hidden.  A container that is set to hidden is guaranteed
+ * to be hidden from the user, but the reverse isn't necessarily true.
+ * A container may be set to visible but can otherwise be obscured by another
+ * element, rendered off-screen, or hidden using direct CSS manipulation.
+ * @return {boolean} Whether the container is set to be visible.
+ */
+goog.ui.Container.prototype.isVisible = function() {
+  return this.visible_;
+};
+
+
+/**
+ * Shows or hides the container.  Does nothing if the container already has
+ * the requested visibility.  Otherwise, dispatches a SHOW or HIDE event as
+ * appropriate, giving listeners a chance to prevent the visibility change.
+ * @param {boolean} visible Whether to show or hide the container.
+ * @param {boolean=} opt_force If true, doesn't check whether the container
+ *     already has the requested visibility, and doesn't dispatch any events.
+ * @return {boolean} Whether the visibility was changed.
+ */
+goog.ui.Container.prototype.setVisible = function(visible, opt_force) {
+  if (opt_force || (this.visible_ != visible && this.dispatchEvent(visible ?
+      goog.ui.Component.EventType.SHOW : goog.ui.Component.EventType.HIDE))) {
+    this.visible_ = visible;
+
+    var elem = this.getElement();
+    if (elem) {
+      goog.style.showElement(elem, visible);
+      if (this.isFocusable()) {
+        // Enable keyboard access only for enabled & visible containers.
+        this.renderer_.enableTabIndex(this.getKeyEventTarget(),
+            this.enabled_ && this.visible_);
+      }
+      if (!opt_force) {
+        this.dispatchEvent(this.visible_ ?
+            goog.ui.Container.EventType.AFTER_SHOW :
+            goog.ui.Container.EventType.AFTER_HIDE);
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+};
+
+
+/**
+ * Returns true if the container is enabled, false otherwise.
+ * @return {boolean} Whether the container is enabled.
+ */
+goog.ui.Container.prototype.isEnabled = function() {
+  return this.enabled_;
+};
+
+
+/**
+ * Enables/disables the container based on the {@code enable} argument.
+ * Dispatches an {@code ENABLED} or {@code DISABLED} event prior to changing
+ * the container's state, which may be caught and canceled to prevent the
+ * container from changing state.  Also enables/disables child controls.
+ * @param {boolean} enable Whether to enable or disable the container.
+ */
+goog.ui.Container.prototype.setEnabled = function(enable) {
+  if (this.enabled_ != enable && this.dispatchEvent(enable ?
+      goog.ui.Component.EventType.ENABLE :
+      goog.ui.Component.EventType.DISABLE)) {
+    if (enable) {
+      // Flag the container as enabled first, then update children.  This is
+      // because controls can't be enabled if their parent is disabled.
+      this.enabled_ = true;
+      this.forEachChild(function(child) {
+        // Enable child control unless it is flagged.
+        if (child.wasDisabled) {
+          delete child.wasDisabled;
+        } else {
+          child.setEnabled(true);
+        }
+      });
+    } else {
+      // Disable children first, then flag the container as disabled.  This is
+      // because controls can't be disabled if their parent is already disabled.
+      this.forEachChild(function(child) {
+        // Disable child control, or flag it if it's already disabled.
+        if (child.isEnabled()) {
+          child.setEnabled(false);
+        } else {
+          child.wasDisabled = true;
+        }
+      });
+      this.enabled_ = false;
+      this.setMouseButtonPressed(false);
+    }
+
+    if (this.isFocusable()) {
+      // Enable keyboard access only for enabled & visible components.
+      this.renderer_.enableTabIndex(this.getKeyEventTarget(),
+          enable && this.visible_);
+    }
+  }
+};
+
+
+/**
+ * Returns true if the container is focusable, false otherwise.  The default
+ * is true.  Focusable containers always have a tab index and allocate a key
+ * handler to handle keyboard events while focused.
+ * @return {boolean} Whether the component is focusable.
+ */
+goog.ui.Container.prototype.isFocusable = function() {
+  return this.focusable_;
+};
+
+
+/**
+ * Sets whether the container is focusable.  The default is true.  Focusable
+ * containers always have a tab index and allocate a key handler to handle
+ * keyboard events while focused.
+ * @param {boolean} focusable Whether the component is to be focusable.
+ */
+goog.ui.Container.prototype.setFocusable = function(focusable) {
+  if (focusable != this.focusable_ && this.isInDocument()) {
+    this.enableFocusHandling_(focusable);
+  }
+  this.focusable_ = focusable;
+  if (this.enabled_ && this.visible_) {
+    this.renderer_.enableTabIndex(this.getKeyEventTarget(), focusable);
+  }
+};
+
+
+/**
+ * Returns true if the container allows children to be focusable, false
+ * otherwise.  Only effective if the container is not focusable.
+ * @return {boolean} Whether children should be focusable.
+ */
+goog.ui.Container.prototype.isFocusableChildrenAllowed = function() {
+  return this.allowFocusableChildren_;
+};
+
+
+/**
+ * Sets whether the container allows children to be focusable, false
+ * otherwise.  Only effective if the container is not focusable.
+ * @param {boolean} focusable Whether the children should be focusable.
+ */
+goog.ui.Container.prototype.setFocusableChildrenAllowed = function(focusable) {
+  this.allowFocusableChildren_ = focusable;
+};
+
+
+/**
+ * @return {boolean} Whether highlighting a child component should also open it.
+ */
+goog.ui.Container.prototype.isOpenFollowsHighlight = function() {
+  return this.openFollowsHighlight_;
+};
+
+
+/**
+ * Sets whether highlighting a child component should also open it.
+ * @param {boolean} follow Whether highlighting a child component also opens it.
+ */
+goog.ui.Container.prototype.setOpenFollowsHighlight = function(follow) {
+  this.openFollowsHighlight_ = follow;
+};
+
+
+// Highlight management.
+
+
+/**
+ * Returns the index of the currently highlighted item (-1 if none).
+ * @return {number} Index of the currently highlighted item.
+ */
+goog.ui.Container.prototype.getHighlightedIndex = function() {
+  return this.highlightedIndex_;
+};
+
+
+/**
+ * Highlights the item at the given 0-based index (if any).  If another item
+ * was previously highlighted, it is un-highlighted.
+ * @param {number} index Index of item to highlight (-1 removes the current
+ *     highlight).
+ */
+goog.ui.Container.prototype.setHighlightedIndex = function(index) {
+  var child = this.getChildAt(index);
+  if (child) {
+    child.setHighlighted(true);
+  } else if (this.highlightedIndex_ > -1) {
+    this.getHighlighted().setHighlighted(false);
+  }
+};
+
+
+/**
+ * Highlights the given item if it exists and is a child of the container;
+ * otherwise un-highlights the currently highlighted item.
+ * @param {goog.ui.Control} item Item to highlight.
+ */
+goog.ui.Container.prototype.setHighlighted = function(item) {
+  this.setHighlightedIndex(this.indexOfChild(item));
+};
+
+
+/**
+ * Returns the currently highlighted item (if any).
+ * @return {goog.ui.Control?} Highlighted item (null if none).
+ */
+goog.ui.Container.prototype.getHighlighted = function() {
+  return this.getChildAt(this.highlightedIndex_);
+};
+
+
+/**
+ * Highlights the first highlightable item in the container
+ */
+goog.ui.Container.prototype.highlightFirst = function() {
+  this.highlightHelper(function(index, max) {
+    return (index + 1) % max;
+  }, this.getChildCount() - 1);
+};
+
+
+/**
+ * Highlights the last highlightable item in the container.
+ */
+goog.ui.Container.prototype.highlightLast = function() {
+  this.highlightHelper(function(index, max) {
+    index--;
+    return index < 0 ? max - 1 : index;
+  }, 0);
+};
+
+
+/**
+ * Highlights the next highlightable item (or the first if nothing is currently
+ * highlighted).
+ */
+goog.ui.Container.prototype.highlightNext = function() {
+  this.highlightHelper(function(index, max) {
+    return (index + 1) % max;
+  }, this.highlightedIndex_);
+};
+
+
+/**
+ * Highlights the previous highlightable item (or the last if nothing is
+ * currently highlighted).
+ */
+goog.ui.Container.prototype.highlightPrevious = function() {
+  this.highlightHelper(function(index, max) {
+    index--;
+    return index < 0 ? max - 1 : index;
+  }, this.highlightedIndex_);
+};
+
+
+/**
+ * Helper function that manages the details of moving the highlight among
+ * child controls in response to keyboard events.
+ * @param {function(number, number) : number} fn Function that accepts the
+ *     current and maximum indices, and returns the next index to check.
+ * @param {number} startIndex Start index.
+ * @return {boolean} Whether the highlight has changed.
+ * @protected
+ */
+goog.ui.Container.prototype.highlightHelper = function(fn, startIndex) {
+  // If the start index is -1 (meaning there's nothing currently highlighted),
+  // try starting from the currently open item, if any.
+  var curIndex = startIndex < 0 ?
+      this.indexOfChild(this.openItem_) : startIndex;
+  var numItems = this.getChildCount();
+
+  curIndex = fn.call(this, curIndex, numItems);
+  var visited = 0;
+  while (visited <= numItems) {
+    var control = this.getChildAt(curIndex);
+    if (control && this.canHighlightItem(control)) {
+      this.setHighlightedIndexFromKeyEvent(curIndex);
+      return true;
+    }
+    visited++;
+    curIndex = fn.call(this, curIndex, numItems);
+  }
+  return false;
+};
+
+
+/**
+ * Returns whether the given item can be highlighted.
+ * @param {goog.ui.Control} item The item to check.
+ * @return {boolean} Whether the item can be highlighted.
+ * @protected
+ */
+goog.ui.Container.prototype.canHighlightItem = function(item) {
+  return item.isVisible() && item.isEnabled() &&
+      item.isSupportedState(goog.ui.Component.State.HOVER);
+};
+
+
+/**
+ * Helper method that sets the highlighted index to the given index in response
+ * to a keyboard event.  The base class implementation simply calls the
+ * {@link #setHighlightedIndex} method, but subclasses can override this
+ * behavior as needed.
+ * @param {number} index Index of item to highlight.
+ * @protected
+ */
+goog.ui.Container.prototype.setHighlightedIndexFromKeyEvent = function(index) {
+  this.setHighlightedIndex(index);
+};
+
+
+/**
+ * Returns the currently open (expanded) control in the container (null if
+ * none).
+ * @return {goog.ui.Control?} The currently open control.
+ */
+goog.ui.Container.prototype.getOpenItem = function() {
+  return this.openItem_;
+};
+
+
+/**
+ * Returns true if the mouse button is pressed, false otherwise.
+ * @return {boolean} Whether the mouse button is pressed.
+ */
+goog.ui.Container.prototype.isMouseButtonPressed = function() {
+  return this.mouseButtonPressed_;
+};
+
+
+/**
+ * Sets or clears the "mouse button pressed" flag.
+ * @param {boolean} pressed Whether the mouse button is presed.
+ */
+goog.ui.Container.prototype.setMouseButtonPressed = function(pressed) {
+  this.mouseButtonPressed_ = pressed;
+};
+// Copyright 2008 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview Renderer for {@link goog.ui.MenuHeader}s.
+ *
+ */
+
+goog.provide('goog.ui.MenuHeaderRenderer');
+
+goog.require('goog.dom');
+goog.require('goog.dom.classes');
+goog.require('goog.ui.ControlRenderer');
+
+
+
+/**
+ * Renderer for menu headers.
+ * @constructor
+ * @extends {goog.ui.ControlRenderer}
+ */
+goog.ui.MenuHeaderRenderer = function() {
+  goog.ui.ControlRenderer.call(this);
+};
+goog.inherits(goog.ui.MenuHeaderRenderer, goog.ui.ControlRenderer);
+goog.addSingletonGetter(goog.ui.MenuHeaderRenderer);
+
+
+/**
+ * Default CSS class to be applied to the root element of components rendered
+ * by this renderer.
+ * @type {string}
+ */
+goog.ui.MenuHeaderRenderer.CSS_CLASS = goog.getCssName('goog-menuheader');
+
+
+/**
+ * Returns the CSS class to be applied to the root element of components
+ * rendered using this renderer.
+ * @return {string} Renderer-specific CSS class.
+ * @override
+ */
+goog.ui.MenuHeaderRenderer.prototype.getCssClass = function() {
+  return goog.ui.MenuHeaderRenderer.CSS_CLASS;
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A class for representing menu headers.
+ * @see goog.ui.Menu
+ *
+ */
+
+goog.provide('goog.ui.MenuHeader');
+
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.Control');
+goog.require('goog.ui.MenuHeaderRenderer');
+goog.require('goog.ui.registry');
+
+
+
+/**
+ * Class representing a menu header.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure to
+ *     display as the content of the item (use to add icons or styling to
+ *     menus).
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper used for
+ *     document interactions.
+ * @param {goog.ui.MenuHeaderRenderer=} opt_renderer Optional renderer.
+ * @constructor
+ * @extends {goog.ui.Control}
+ */
+goog.ui.MenuHeader = function(content, opt_domHelper, opt_renderer) {
+  goog.ui.Control.call(this, content, opt_renderer ||
+      goog.ui.MenuHeaderRenderer.getInstance(), opt_domHelper);
+
+  this.setSupportedState(goog.ui.Component.State.DISABLED, false);
+  this.setSupportedState(goog.ui.Component.State.HOVER, false);
+  this.setSupportedState(goog.ui.Component.State.ACTIVE, false);
+  this.setSupportedState(goog.ui.Component.State.FOCUSED, false);
+
+  // Headers are always considered disabled.
+  this.setStateInternal(goog.ui.Component.State.DISABLED);
+};
+goog.inherits(goog.ui.MenuHeader, goog.ui.Control);
+
+
+// Register a decorator factory function for goog.ui.MenuHeaders.
+goog.ui.registry.setDecoratorByClassName(
+    goog.ui.MenuHeaderRenderer.CSS_CLASS,
+    function() {
+      // MenuHeader defaults to using MenuHeaderRenderer.
+      return new goog.ui.MenuHeader(null);
+    });
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A base menu class that supports key and mouse events. The menu
+ * can be bound to an existing HTML structure or can generate its own DOM.
+ *
+ * To decorate, the menu should be bound to an element containing children
+ * with the classname 'goog-menuitem'.  HRs will be classed as separators.
+ *
+ * Decorate Example:
+ * <div id="menu" class="goog-menu" tabIndex="0">
+ *   <div class="goog-menuitem">Google</div>
+ *   <div class="goog-menuitem">Yahoo</div>
+ *   <div class="goog-menuitem">MSN</div>
+ *   <hr>
+ *   <div class="goog-menuitem">New...</div>
+ * </div>
+ * <script>
+ *
+ * var menu = new goog.ui.Menu();
+ * menu.decorate(goog.dom.getElement('menu'));
+ *
+ * TESTED=FireFox 2.0, IE6, Opera 9, Chrome.
+ * TODO(user): Key handling is flaky in Opera and Chrome
+ * TODO(user): Rename all references of "item" to child since menu is
+ * essentially very generic and could, in theory, host a date or color picker.
+ *
+ * @see ../demos/menu.html
+ * @see ../demos/menus.html
+ */
+
+goog.provide('goog.ui.Menu');
+goog.provide('goog.ui.Menu.EventType');
+
+goog.require('goog.math.Coordinate');
+goog.require('goog.string');
+goog.require('goog.style');
+goog.require('goog.ui.Component.EventType');
+goog.require('goog.ui.Component.State');
+goog.require('goog.ui.Container');
+goog.require('goog.ui.Container.Orientation');
+goog.require('goog.ui.MenuHeader');
+goog.require('goog.ui.MenuItem');
+goog.require('goog.ui.MenuRenderer');
+goog.require('goog.ui.MenuSeparator');
+
+// The dependencies MenuHeader, MenuItem, and MenuSeparator are implicit.
+// There are no references in the code, but we need to load these
+// classes before goog.ui.Menu.
+
+
+
+// TODO(robbyw): Reverse constructor argument order for consistency.
+/**
+ * A basic menu class.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper.
+ * @param {goog.ui.MenuRenderer=} opt_renderer Renderer used to render or
+ *     decorate the container; defaults to {@link goog.ui.MenuRenderer}.
+ * @constructor
+ * @extends {goog.ui.Container}
+ */
+goog.ui.Menu = function(opt_domHelper, opt_renderer) {
+  goog.ui.Container.call(this, goog.ui.Container.Orientation.VERTICAL,
+      opt_renderer || goog.ui.MenuRenderer.getInstance(), opt_domHelper);
+
+  // Unlike Containers, Menus aren't keyboard-accessible by default.  This line
+  // preserves backwards compatibility with code that depends on menus not
+  // receiving focus - e.g. {@code goog.ui.MenuButton}.
+  this.setFocusable(false);
+};
+goog.inherits(goog.ui.Menu, goog.ui.Container);
+
+
+// TODO(robbyw): Remove this and all references to it.
+// Please ensure that BEFORE_SHOW behavior is not disrupted as a result.
+/**
+ * Event types dispatched by the menu.
+ * @enum {string}
+ * @deprecated Use goog.ui.Component.EventType.
+ */
+goog.ui.Menu.EventType = {
+  /** Dispatched before the menu becomes visible */
+  BEFORE_SHOW: goog.ui.Component.EventType.BEFORE_SHOW,
+
+  /** Dispatched when the menu is shown */
+  SHOW: goog.ui.Component.EventType.SHOW,
+
+  /** Dispatched before the menu becomes hidden */
+  BEFORE_HIDE: goog.ui.Component.EventType.HIDE,
+
+  /** Dispatched when the menu is hidden */
+  HIDE: goog.ui.Component.EventType.HIDE
+};
+
+
+// TODO(robbyw): Remove this and all references to it.
+/**
+ * CSS class for menus.
+ * @type {string}
+ * @deprecated Use goog.ui.MenuRenderer.CSS_CLASS.
+ */
+goog.ui.Menu.CSS_CLASS = goog.ui.MenuRenderer.CSS_CLASS;
+
+
+/**
+ * Coordinates of the mousedown event that caused this menu to be made visible.
+ * Used to prevent the consequent mouseup event due to a simple click from
+ * activating a menu item immediately. Considered protected; should only be used
+ * within this package or by subclasses.
+ * @type {goog.math.Coordinate|undefined}
+ */
+goog.ui.Menu.prototype.openingCoords;
+
+
+/**
+ * Whether the menu can move the focus to it's key event target when it is
+ * shown.  Default = true
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Menu.prototype.allowAutoFocus_ = true;
+
+
+/**
+ * Whether the menu should use windows syle behavior and allow disabled menu
+ * items to be highlighted (though not selectable).  Defaults to false
+ * @type {boolean}
+ * @private
+ */
+goog.ui.Menu.prototype.allowHighlightDisabled_ = false;
+
+
+/**
+ * Returns the CSS class applied to menu elements, also used as the prefix for
+ * derived styles, if any.  Subclasses should override this method as needed.
+ * Considered protected.
+ * @return {string} The CSS class applied to menu elements.
+ * @protected
+ * @deprecated Use getRenderer().getCssClass().
+ */
+goog.ui.Menu.prototype.getCssClass = function() {
+  return this.getRenderer().getCssClass();
+};
+
+
+/**
+ * Returns whether the provided element is to be considered inside the menu for
+ * purposes such as dismissing the menu on an event.  This is so submenus can
+ * make use of elements outside their own DOM.
+ * @param {Element} element The element to test for.
+ * @return {boolean} Whether the provided element is to be considered inside
+ *     the menu.
+ */
+goog.ui.Menu.prototype.containsElement = function(element) {
+  if (this.getRenderer().containsElement(this, element)) {
+    return true;
+  }
+
+  for (var i = 0, count = this.getChildCount(); i < count; i++) {
+    var child = this.getChildAt(i);
+    if (typeof child.containsElement == 'function' &&
+        child.containsElement(element)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+
+/**
+ * Adds a new menu item at the end of the menu.
+ * @param {goog.ui.MenuHeader|goog.ui.MenuItem|goog.ui.MenuSeparator} item Menu
+ *     item to add to the menu.
+ * @deprecated Use {@link #addChild} instead, with true for the second argument.
+ */
+goog.ui.Menu.prototype.addItem = function(item) {
+  this.addChild(item, true);
+};
+
+
+/**
+ * Adds a new menu item at a specific index in the menu.
+ * @param {goog.ui.MenuHeader|goog.ui.MenuItem|goog.ui.MenuSeparator} item Menu
+ *     item to add to the menu.
+ * @param {number} n Index at which to insert the menu item.
+ * @deprecated Use {@link #addChildAt} instead, with true for the third
+ *     argument.
+ */
+goog.ui.Menu.prototype.addItemAt = function(item, n) {
+  this.addChildAt(item, n, true);
+};
+
+
+/**
+ * Removes an item from the menu and disposes of it.
+ * @param {goog.ui.MenuHeader|goog.ui.MenuItem|goog.ui.MenuSeparator} item The
+ *     menu item to remove.
+ * @deprecated Use {@link #removeChild} instead.
+ */
+goog.ui.Menu.prototype.removeItem = function(item) {
+  var removedChild = this.removeChild(item, true);
+  if (removedChild) {
+    removedChild.dispose();
+  }
+};
+
+
+/**
+ * Removes a menu item at a given index in the menu and disposes of it.
+ * @param {number} n Index of item.
+ * @deprecated Use {@link #removeChildAt} instead.
+ */
+goog.ui.Menu.prototype.removeItemAt = function(n) {
+  var removedChild = this.removeChildAt(n, true);
+  if (removedChild) {
+    removedChild.dispose();
+  }
+};
+
+
+/**
+ * Returns a reference to the menu item at a given index.
+ * @param {number} n Index of menu item.
+ * @return {goog.ui.MenuHeader|goog.ui.MenuItem|goog.ui.MenuSeparator|null}
+ *     Reference to the menu item.
+ * @deprecated Use {@link #getChildAt} instead.
+ */
+goog.ui.Menu.prototype.getItemAt = function(n) {
+  return /** @type {goog.ui.MenuItem?} */(this.getChildAt(n));
+};
+
+
+/**
+ * Returns the number of items in the menu (including separators).
+ * @return {number} The number of items in the menu.
+ * @deprecated Use {@link #getChildCount} instead.
+ */
+goog.ui.Menu.prototype.getItemCount = function() {
+  return this.getChildCount();
+};
+
+
+/**
+ * Returns an array containing the menu items contained in the menu.
+ * @return {Array.<goog.ui.MenuItem>} An array of menu items.
+ * @deprecated Use getChildAt, forEachChild, and getChildCount.
+ */
+goog.ui.Menu.prototype.getItems = function() {
+  // TODO(user): Remove reference to getItems and instead use getChildAt,
+  // forEachChild, and getChildCount
+  var children = [];
+  this.forEachChild(function(child) {
+    children.push(child);
+  });
+  return children;
+};
+
+
+/**
+ * Sets the position of the menu relative to the view port.
+ * @param {number|goog.math.Coordinate} x Left position or coordinate obj.
+ * @param {number=} opt_y Top position.
+ */
+goog.ui.Menu.prototype.setPosition = function(x, opt_y) {
+  // NOTE(user): It is necessary to temporarily set the display from none, so
+  // that the position gets set correctly.
+  var visible = this.isVisible();
+  if (!visible) {
+    goog.style.showElement(this.getElement(), true);
+  }
+  goog.style.setPageOffset(this.getElement(), x, opt_y);
+  if (!visible) {
+    goog.style.showElement(this.getElement(), false);
+  }
+};
+
+
+/**
+ * Gets the page offset of the menu, or null if the menu isn't visible
+ * @return {goog.math.Coordinate?} Object holding the x-y coordinates of the
+ *     menu or null if the menu is not visible.
+ */
+goog.ui.Menu.prototype.getPosition = function() {
+  return this.isVisible() ? goog.style.getPageOffset(this.getElement()) : null;
+};
+
+
+/**
+ * Sets whether the menu can automatically move focus to its key event target
+ * when it is set to visible.
+ * @param {boolean} allow Whether the menu can automatically move focus to its
+ *     key event target when it is set to visible.
+ */
+goog.ui.Menu.prototype.setAllowAutoFocus = function(allow) {
+  this.allowAutoFocus_ = allow;
+  if (allow) {
+    this.setFocusable(true);
+  }
+};
+
+
+/**
+ * @return {boolean} Whether the menu can automatically move focus to its key
+ *     event target when it is set to visible.
+ */
+goog.ui.Menu.prototype.getAllowAutoFocus = function() {
+  return this.allowAutoFocus_;
+};
+
+
+/**
+ * Sets whether the menu will highlight disabled menu items or skip to the next
+ * active item.
+ * @param {boolean} allow Whether the menu will highlight disabled menu items or
+ *     skip to the next active item.
+ */
+goog.ui.Menu.prototype.setAllowHighlightDisabled = function(allow) {
+  this.allowHighlightDisabled_ = allow;
+};
+
+
+/**
+ * @return {boolean} Whether the menu will highlight disabled menu items or skip
+ *     to the next active item.
+ */
+goog.ui.Menu.prototype.getAllowHighlightDisabled = function() {
+  return this.allowHighlightDisabled_;
+};
+
+
+/**
+ * @override
+ * @param {goog.events.Event=} opt_e Mousedown event that caused this menu to
+ *     be made visible (ignored if show is false).
+ */
+goog.ui.Menu.prototype.setVisible = function(show, opt_force, opt_e) {
+  var visibilityChanged = goog.ui.Menu.superClass_.setVisible.call(this, show,
+      opt_force);
+  if (visibilityChanged && show && this.isInDocument() &&
+      this.allowAutoFocus_) {
+    this.getKeyEventTarget().focus();
+  }
+  if (show && opt_e && goog.isNumber(opt_e.clientX)) {
+    this.openingCoords = new goog.math.Coordinate(opt_e.clientX, opt_e.clientY);
+  } else {
+    this.openingCoords = null;
+  }
+  return visibilityChanged;
+};
+
+
+/** @override */
+goog.ui.Menu.prototype.handleEnterItem = function(e) {
+  if (this.allowAutoFocus_) {
+    this.getKeyEventTarget().focus();
+  }
+
+  return goog.ui.Menu.superClass_.handleEnterItem.call(this, e);
+};
+
+
+/**
+ * Highlights the next item that begins with the specified string.  If no
+ * (other) item begins with the given string, the selection is unchanged.
+ * @param {string} charStr The prefix to match.
+ * @return {boolean} Whether a matching prefix was found.
+ */
+goog.ui.Menu.prototype.highlightNextPrefix = function(charStr) {
+  var re = new RegExp('^' + goog.string.regExpEscape(charStr), 'i');
+  return this.highlightHelper(function(index, max) {
+    // Index is >= -1 because it is set to -1 when nothing is selected.
+    var start = index < 0 ? 0 : index;
+    var wrapped = false;
+
+    // We always start looking from one after the current, because we
+    // keep the current selection only as a last resort. This makes the
+    // loop a little awkward in the case where there is no current
+    // selection, as we need to stop somewhere but can't just stop
+    // when index == start, which is why we need the 'wrapped' flag.
+    do {
+      ++index;
+      if (index == max) {
+        index = 0;
+        wrapped = true;
+      }
+      var name = this.getChildAt(index).getCaption();
+      if (name && name.match(re)) {
+        return index;
+      }
+    } while (!wrapped || index != start);
+    return this.getHighlightedIndex();
+  }, this.getHighlightedIndex());
+};
+
+
+/** @override */
+goog.ui.Menu.prototype.canHighlightItem = function(item) {
+  return (this.allowHighlightDisabled_ || item.isEnabled()) &&
+      item.isVisible() && item.isSupportedState(goog.ui.Component.State.HOVER);
+};
+
+
+/** @override */
+goog.ui.Menu.prototype.decorateInternal = function(element) {
+  this.decorateContent(element);
+  goog.ui.Menu.superClass_.decorateInternal.call(this, element);
+};
+
+
+/** @override */
+goog.ui.Menu.prototype.handleKeyEventInternal = function(e) {
+  var handled = goog.base(this, 'handleKeyEventInternal', e);
+  if (!handled) {
+    // Loop through all child components, and for each menu item call its
+    // key event handler so that keyboard mnemonics can be handled.
+    this.forEachChild(function(menuItem) {
+      if (!handled && menuItem.getMnemonic &&
+          menuItem.getMnemonic() == e.keyCode) {
+        if (this.isEnabled()) {
+          this.setHighlighted(menuItem);
+        }
+        // We still delegate to handleKeyEvent, so that it can handle
+        // enabled/disabled state.
+        handled = menuItem.handleKeyEvent(e);
+      }
+    }, this);
+  }
+  return handled;
+};
+
+
+/**
+ * Decorate menu items located in any descendent node which as been explicitly
+ * marked as a 'content' node.
+ * @param {Element} element Element to decorate.
+ * @protected
+ */
+goog.ui.Menu.prototype.decorateContent = function(element) {
+  var renderer = this.getRenderer();
+  var contentElements = this.getDomHelper().getElementsByTagNameAndClass('div',
+      goog.getCssName(renderer.getCssClass(), 'content'), element);
+
+  // Some versions of IE do not like it when you access this nodeList
+  // with invalid indices. See
+  // http://code.google.com/p/closure-library/issues/detail?id=373
+  var length = contentElements.length;
+  for (var i = 0; i < length; i++) {
+    renderer.decorateChildren(this, contentElements[i]);
+  }
+};
+// Copyright 2006 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview An object that encapsulates text changed events for textareas
+ * and input element of type text and password. The event occurs after the value
+ * has been changed. The event does not occur if value was changed
+ * programmatically.<br>
+ * <br>
+ * Note: this does not guarantee the correctness of {@code keyCode} or
+ * {@code charCode}, or attempt to unify them across browsers. See
+ * {@code goog.events.KeyHandler} for that functionality.<br>
+ * <br>
+ * Known issues:
+ * <ul>
+ * <li>Does not trigger for drop events on Opera due to browser bug.
+ * <li>IE doesn't have native support for input event. WebKit before version 531
+ *     doesn't have support for textareas. For those browsers an emulation mode
+ *     based on key, clipboard and drop events is used. Thus this event won't
+ *     trigger in emulation mode if text was modified by context menu commands
+ *     such as 'Undo' and 'Delete'.
+ * </ul>
+ * @author arv@google.com (Erik Arvidsson)
+ * @see ../demos/inputhandler.html
+ */
+
+goog.provide('goog.events.InputHandler');
+goog.provide('goog.events.InputHandler.EventType');
+
+goog.require('goog.Timer');
+goog.require('goog.dom');
+goog.require('goog.events');
+goog.require('goog.events.BrowserEvent');
+goog.require('goog.events.EventHandler');
+goog.require('goog.events.EventTarget');
+goog.require('goog.events.KeyCodes');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * This event handler will dispatch events when the user types into a text
+ * input, password input or a textarea
+ * @param {Element} element  The element that you want to listen for input
+ *     events on.
+ * @constructor
+ * @extends {goog.events.EventTarget}
+ */
+goog.events.InputHandler = function(element) {
+  goog.events.EventTarget.call(this);
+
+  /**
+   * The element that you want to listen for input events on.
+   * @type {Element}
+   * @private
+   */
+  this.element_ = element;
+
+  /**
+   * Whether input event is emulated.
+   * IE doesn't support input events. We could use property change events but
+   * they are broken in many ways:
+   * - Fire even if value was changed programmatically.
+   * - Aren't always delivered. For example, if you change value or even width
+   *   of input programmatically, next value change made by user won't fire an
+   *   event.
+   * WebKit before version 531 did not support input events for textareas.
+   * @type {boolean}
+   * @private
+   */
+  this.inputEventEmulation_ =
+      goog.userAgent.IE ||
+      (goog.userAgent.WEBKIT && !goog.userAgent.isVersion('531') &&
+          element.tagName == 'TEXTAREA');
+
+  /**
+   * @type {goog.events.EventHandler}
+   * @private
+   */
+  this.eventHandler_ = new goog.events.EventHandler(this);
+  this.eventHandler_.listen(
+      this.element_,
+      this.inputEventEmulation_ ? ['keydown', 'paste', 'cut', 'drop'] : 'input',
+      this);
+};
+goog.inherits(goog.events.InputHandler, goog.events.EventTarget);
+
+
+/**
+ * Enum type for the events fired by the input handler
+ * @enum {string}
+ */
+goog.events.InputHandler.EventType = {
+  INPUT: 'input'
+};
+
+
+/**
+ * Id of a timer used to postpone firing input event in emulation mode.
+ * @type {?number}
+ * @private
+ */
+goog.events.InputHandler.prototype.timer_ = null;
+
+
+/**
+ * This handles the underlying events and dispatches a new event as needed.
+ * @param {goog.events.BrowserEvent} e The underlying browser event.
+ */
+goog.events.InputHandler.prototype.handleEvent = function(e) {
+  if (this.inputEventEmulation_) {
+    // Filter out key events that don't modify text.
+    if (e.type == 'keydown' &&
+        !goog.events.KeyCodes.isTextModifyingKeyEvent(e)) {
+      return;
+    }
+
+    // It is still possible that pressed key won't modify the value of an
+    // element. Storing old value will help us to detect modification but is
+    // also a little bit dangerous. If value is changed programmatically in
+    // another key down handler, we will detect it as user-initiated change.
+    var valueBeforeKey = e.type == 'keydown' ? this.element_.value : null;
+
+    // In IE on XP, IME the element's value has already changed when we get
+    // keydown events when the user is using an IME. In this case, we can't
+    // check the current value normally, so we assume that it's a modifying key
+    // event. This means that ENTER when used to commit will fire a spurious
+    // input event, but it's better to have a false positive than let some input
+    // slip through the cracks.
+    if (goog.userAgent.IE && e.keyCode == goog.events.KeyCodes.WIN_IME) {
+      valueBeforeKey = null;
+    }
+
+    // Create an input event now, because when we fire it on timer, the
+    // underlying event will already be disposed.
+    var inputEvent = this.createInputEvent_(e);
+
+    // Since key down, paste, cut and drop events are fired before actual value
+    // of the element has changed, we need to postpone dispatching input event
+    // until value is updated.
+    this.cancelTimerIfSet_();
+    this.timer_ = goog.Timer.callOnce(function() {
+      this.timer_ = null;
+      if (this.element_.value != valueBeforeKey) {
+        this.dispatchEvent(inputEvent);
+      }
+    }, 0, this);
+  } else {
+    // Unlike other browsers, Opera fires an extra input event when an element
+    // is blurred after the user has input into it. Since Opera doesn't fire
+    // input event on drop, it's enough to check whether element still has focus
+    // to suppress bogus notification.
+    if (!goog.userAgent.OPERA || this.element_ ==
+        goog.dom.getOwnerDocument(this.element_).activeElement) {
+      this.dispatchEvent(this.createInputEvent_(e));
+    }
+  }
+};
+
+
+/**
+ * Cancels timer if it is set, does nothing otherwise.
+ * @private
+ */
+goog.events.InputHandler.prototype.cancelTimerIfSet_ = function() {
+  if (this.timer_ != null) {
+    goog.Timer.clear(this.timer_);
+    this.timer_ = null;
+  }
+};
+
+
+/**
+ * Creates an input event from the browser event.
+ * @param {goog.events.BrowserEvent} be A browser event.
+ * @return {goog.events.BrowserEvent} An input event.
+ * @private
+ */
+goog.events.InputHandler.prototype.createInputEvent_ = function(be) {
+  var e = new goog.events.BrowserEvent(be.getBrowserEvent());
+  e.type = goog.events.InputHandler.EventType.INPUT;
+  return e;
+};
+
+
+/** @override */
+goog.events.InputHandler.prototype.disposeInternal = function() {
+  goog.events.InputHandler.superClass_.disposeInternal.call(this);
+  this.eventHandler_.dispose();
+  this.cancelTimerIfSet_();
+  delete this.element_;
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
+ * @fileoverview A combo box control that allows user input with
+ * auto-suggestion from a limited set of options.
+ *
+ * @see ../demos/combobox.html
+ */
+
+goog.provide('goog.ui.ComboBox');
+goog.provide('goog.ui.ComboBoxItem');
+
+goog.require('goog.Timer');
+goog.require('goog.debug.Logger');
+goog.require('goog.dom.classes');
+goog.require('goog.events');
+goog.require('goog.events.InputHandler');
+goog.require('goog.events.KeyCodes');
+goog.require('goog.events.KeyHandler');
+goog.require('goog.positioning.Corner');
+goog.require('goog.positioning.MenuAnchoredPosition');
+goog.require('goog.string');
+goog.require('goog.style');
+goog.require('goog.ui.Component');
+goog.require('goog.ui.ItemEvent');
+goog.require('goog.ui.LabelInput');
+goog.require('goog.ui.Menu');
+goog.require('goog.ui.MenuItem');
+goog.require('goog.ui.registry');
+goog.require('goog.userAgent');
+
+
+
+/**
+ * A ComboBox control.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional DOM helper.
+ * @param {goog.ui.Menu=} opt_menu Optional menu.
+ * @extends {goog.ui.Component}
+ * @constructor
+ */
+goog.ui.ComboBox = function(opt_domHelper, opt_menu) {
+  goog.ui.Component.call(this, opt_domHelper);
+
+  this.labelInput_ = new goog.ui.LabelInput();
+  this.enabled_ = true;
+
+  // TODO(user): Allow lazy creation of menus/menu items
+  this.menu_ = opt_menu || new goog.ui.Menu(this.getDomHelper());
+  this.setupMenu_();
+};
+goog.inherits(goog.ui.ComboBox, goog.ui.Component);
+
+
+/**
+ * Number of milliseconds to wait before dismissing combobox after blur.
+ * @type {number}
+ */
+goog.ui.ComboBox.BLUR_DISMISS_TIMER_MS = 250;
+
+
+/**
+ * A logger to help debugging of combo box behavior.
+ * @type {goog.debug.Logger}
+ * @private
+ */
+goog.ui.ComboBox.prototype.logger_ =
+    goog.debug.Logger.getLogger('goog.ui.ComboBox');
+
+
+/**
+ * Whether the combo box is enabled.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.ComboBox.prototype.enabled_;
+
+
+/**
+ * Keyboard event handler to manage key events dispatched by the input element.
+ * @type {goog.events.KeyHandler}
+ * @private
+ */
+goog.ui.ComboBox.prototype.keyHandler_;
+
+
+/**
+ * Input handler to take care of firing events when the user inputs text in
+ * the input.
+ * @type {goog.events.InputHandler?}
+ * @private
+ */
+goog.ui.ComboBox.prototype.inputHandler_ = null;
+
+
+/**
+ * The last input token.
+ * @type {?string}
+ * @private
+ */
+goog.ui.ComboBox.prototype.lastToken_ = null;
+
+
+/**
+ * A LabelInput control that manages the focus/blur state of the input box.
+ * @type {goog.ui.LabelInput?}
+ * @private
+ */
+goog.ui.ComboBox.prototype.labelInput_ = null;
+
+
+/**
+ * Drop down menu for the combo box.  Will be created at construction time.
+ * @type {goog.ui.Menu?}
+ * @private
+ */
+goog.ui.ComboBox.prototype.menu_ = null;
+
+
+/**
+ * The cached visible count.
+ * @type {number}
+ * @private
+ */
+goog.ui.ComboBox.prototype.visibleCount_ = -1;
+
+
+/**
+ * The input element.
+ * @type {Element}
+ * @private
+ */
+goog.ui.ComboBox.prototype.input_ = null;
+
+
+/**
+ * The match function.  The first argument for the match function will be
+ * a MenuItem's caption and the second will be the token to evaluate.
+ * @type {Function}
+ * @private
+ */
+goog.ui.ComboBox.prototype.matchFunction_ = goog.string.startsWith;
+
+
+/**
+ * Element used as the combo boxes button.
+ * @type {Element}
+ * @private
+ */
+goog.ui.ComboBox.prototype.button_ = null;
+
+
+/**
+ * Default text content for the input box when it is unchanged and unfocussed.
+ * @type {string}
+ * @private
+ */
+goog.ui.ComboBox.prototype.defaultText_ = '';
+
+
+/**
+ * Name for the input box created
+ * @type {string}
+ * @private
+ */
+goog.ui.ComboBox.prototype.fieldName_ = '';
+
+
+/**
+ * Timer identifier for delaying the dismissal of the combo menu.
+ * @type {?number}
+ * @private
+ */
+goog.ui.ComboBox.prototype.dismissTimer_ = null;
+
+
+/**
+ * True if the unicode inverted triangle should be displayed in the dropdown
+ * button. Defaults to false.
+ * @type {boolean} useDropdownArrow
+ * @private
+ */
+goog.ui.ComboBox.prototype.useDropdownArrow_ = false;
+
+
+/**
+ * Create the DOM objects needed for the combo box.  A span and text input.
+ * @override
+ */
+goog.ui.ComboBox.prototype.createDom = function() {
+  this.input_ = this.getDomHelper().createDom(
+      'input', {'name': this.fieldName_, 'autocomplete': 'off'});
+  this.button_ = this.getDomHelper().createDom('span',
+      goog.getCssName('goog-combobox-button'));
+  this.setElementInternal(this.getDomHelper().createDom('span',
+      goog.getCssName('goog-combobox'), this.input_, this.button_));
+  if (this.useDropdownArrow_) {
+    this.button_.innerHTML = '&#x25BC;';
+    goog.style.setUnselectable(this.button_, true /* unselectable */);
+  }
+  this.input_.setAttribute('label', this.defaultText_);
+  this.labelInput_.decorate(this.input_);
+  this.menu_.setFocusable(false);
+  if (!this.menu_.isInDocument()) {
+    this.addChild(this.menu_, true);
+  }
+};
+
+
+/**
+ * Enables/Disables the combo box.
+ * @param {boolean} enabled Whether to enable (true) or disable (false) the
+ *     combo box.
+ */
+goog.ui.ComboBox.prototype.setEnabled = function(enabled) {
+  this.enabled_ = enabled;
+  this.labelInput_.setEnabled(enabled);
+  goog.dom.classes.enable(this.getElement(),
+      goog.getCssName('goog-combobox-disabled'), !enabled);
+};
+
+
+/** @override */
+goog.ui.ComboBox.prototype.enterDocument = function() {
+  goog.ui.ComboBox.superClass_.enterDocument.call(this);
+
+  var handler = this.getHandler();
+  handler.listen(this.getElement(),
+      goog.events.EventType.MOUSEDOWN, this.onComboMouseDown_);
+  handler.listen(this.getDomHelper().getDocument(),
+      goog.events.EventType.MOUSEDOWN, this.onDocClicked_);
+
+  handler.listen(this.input_,
+      goog.events.EventType.BLUR, this.onInputBlur_);
+
+  this.keyHandler_ = new goog.events.KeyHandler(this.input_);
+  handler.listen(this.keyHandler_,
+      goog.events.KeyHandler.EventType.KEY, this.handleKeyEvent);
+
+  this.inputHandler_ = new goog.events.InputHandler(this.input_);
+  handler.listen(this.inputHandler_,
+      goog.events.InputHandler.EventType.INPUT, this.onInputEvent_);
+
+  handler.listen(this.menu_,
+      goog.ui.Component.EventType.ACTION, this.onMenuSelected_);
+};
+
+
+/** @override */
+goog.ui.ComboBox.prototype.exitDocument = function() {
+  this.keyHandler_.dispose();
+  delete this.keyHandler_;
+  this.inputHandler_.dispose();
+  this.inputHandler_ = null;
+  goog.ui.ComboBox.superClass_.exitDocument.call(this);
+};
+
+
+/**
+ * Combo box currently can't decorate elements.
+ * @return {boolean} The value false.
+ * @override
+ */
+goog.ui.ComboBox.prototype.canDecorate = function() {
+  return false;
+};
+
+
+/** @override */
+goog.ui.ComboBox.prototype.disposeInternal = function() {
+  goog.ui.ComboBox.superClass_.disposeInternal.call(this);
+
+  this.clearDismissTimer_();
+
+  this.labelInput_.dispose();
+  this.menu_.dispose();
+
+  this.labelInput_ = null;
+  this.menu_ = null;
+  this.input_ = null;
+  this.button_ = null;
+};
+
+
+/**
+ * Dismisses the menu and resets the value of the edit field.
+ */
+goog.ui.ComboBox.prototype.dismiss = function() {
+  this.clearDismissTimer_();
+  this.hideMenu_();
+  this.menu_.setHighlightedIndex(-1);
+};
+
+
+/**
+ * Adds a new menu item at the end of the menu.
+ * @param {goog.ui.MenuItem} item Menu item to add to the menu.
+ */
+goog.ui.ComboBox.prototype.addItem = function(item) {
+  this.menu_.addChild(item, true);
+  this.visibleCount_ = -1;
+};
+
+
+/**
+ * Adds a new menu item at a specific index in the menu.
+ * @param {goog.ui.MenuItem} item Menu item to add to the menu.
+ * @param {number} n Index at which to insert the menu item.
+ */
+goog.ui.ComboBox.prototype.addItemAt = function(item, n) {
+  this.menu_.addChildAt(item, n, true);
+  this.visibleCount_ = -1;
+};
+
+
+/**
+ * Removes an item from the menu and disposes it.
+ * @param {goog.ui.MenuItem} item The menu item to remove.
+ */
+goog.ui.ComboBox.prototype.removeItem = function(item) {
+  var child = this.menu_.removeChild(item, true);
+  if (child) {
+    child.dispose();
+    this.visibleCount_ = -1;
+  }
+};
+
+
+/**
+ * Remove all of the items from the ComboBox menu
+ */
+goog.ui.ComboBox.prototype.removeAllItems = function() {
+  for (var i = this.getItemCount() - 1; i >= 0; --i) {
+    this.removeItem(this.getItemAt(i));
+  }
+};
+
+
+/**
+ * Removes a menu item at a given index in the menu.
+ * @param {number} n Index of item.
+ */
+goog.ui.ComboBox.prototype.removeItemAt = function(n) {
+  var child = this.menu_.removeChildAt(n, true);
+  if (child) {
+    child.dispose();
+    this.visibleCount_ = -1;
+  }
+};
+
+
+/**
+ * Returns a reference to the menu item at a given index.
+ * @param {number} n Index of menu item.
+ * @return {goog.ui.MenuItem?} Reference to the menu item.
+ */
+goog.ui.ComboBox.prototype.getItemAt = function(n) {
+  return /** @type {goog.ui.MenuItem?} */(this.menu_.getChildAt(n));
+};
+
+
+/**
+ * Returns the number of items in the list, including non-visible items,
+ * such as separators.
+ * @return {number} Number of items in the menu for this combobox.
+ */
+goog.ui.ComboBox.prototype.getItemCount = function() {
+  return this.menu_.getChildCount();
+};
+
+
+/**
+ * @return {goog.ui.Menu} The menu that pops up.
+ */
+goog.ui.ComboBox.prototype.getMenu = function() {
+  return this.menu_;
+};
+
+
+/**
+ * @return {Element} The input element.
+ */
+goog.ui.ComboBox.prototype.getInputElement = function() {
+  return this.input_;
+};
+
+
+/**
+ * @return {number} The number of visible items in the menu.
+ * @private
+ */
+goog.ui.ComboBox.prototype.getNumberOfVisibleItems_ = function() {
+  if (this.visibleCount_ == -1) {
+    var count = 0;
+    for (var i = 0, n = this.menu_.getChildCount(); i < n; i++) {
+      var item = this.menu_.getChildAt(i);
+      if (!(item instanceof goog.ui.MenuSeparator) && item.isVisible()) {
+        count++;
+      }
+    }
+    this.visibleCount_ = count;
+  }
+
+  this.logger_.info('getNumberOfVisibleItems() - ' + this.visibleCount_);
+  return this.visibleCount_;
+};
+
+
+/**
+ * Sets the match function to be used when filtering the combo box menu.
+ * @param {Function} matchFunction The match function to be used when filtering
+ *     the combo box menu.
+ */
+goog.ui.ComboBox.prototype.setMatchFunction = function(matchFunction) {
+  this.matchFunction_ = matchFunction;
+};
+
+
+/**
+ * @return {Function} The match function for the combox box.
+ */
+goog.ui.ComboBox.prototype.getMatchFunction = function() {
+  return this.matchFunction_;
+};
+
+
+/**
+ * Sets the default text for the combo box.
+ * @param {string} text The default text for the combo box.
+ */
+goog.ui.ComboBox.prototype.setDefaultText = function(text) {
+  this.defaultText_ = text;
+  if (this.labelInput_) {
+    this.labelInput_.setLabel(this.defaultText_);
+  }
+};
+
+
+/**
+ * @return {string} text The default text for the combox box.
+ */
+goog.ui.ComboBox.prototype.getDefaultText = function() {
+  return this.defaultText_;
+};
+
+
+/**
+ * Sets the field name for the combo box.
+ * @param {string} fieldName The field name for the combo box.
+ */
+goog.ui.ComboBox.prototype.setFieldName = function(fieldName) {
+  this.fieldName_ = fieldName;
+};
+
+
+/**
+ * @return {string} The field name for the combo box.
+ */
+goog.ui.ComboBox.prototype.getFieldName = function() {
+  return this.fieldName_;
+};
+
+
+/**
+ * Set to true if a unicode inverted triangle should be displayed in the
+ * dropdown button.
+ * This option defaults to false for backwards compatibility.
+ * @param {boolean} useDropdownArrow True to use the dropdown arrow.
+ */
+goog.ui.ComboBox.prototype.setUseDropdownArrow = function(useDropdownArrow) {
+  this.useDropdownArrow_ = !!useDropdownArrow;
+};
+
+
+/**
+ * Sets the current value of the combo box.
+ * @param {string} value The new value.
+ */
+goog.ui.ComboBox.prototype.setValue = function(value) {
+  this.logger_.info('setValue() - ' + value);
+  if (this.labelInput_.getValue() != value) {
+    this.labelInput_.setValue(value);
+    this.handleInputChange_();
+  }
+};
+
+
+/**
+ * @return {string} The current value of the combo box.
+ */
+goog.ui.ComboBox.prototype.getValue = function() {
+  return this.labelInput_.getValue();
+};
+
+
+/**
+ * @return {string} HTML escaped token.
+ */
+goog.ui.ComboBox.prototype.getToken = function() {
+  // TODO(user): Remove HTML escaping and fix the existing calls.
+  return goog.string.htmlEscape(this.getTokenText_());
+};
+
+
+/**
+ * @return {string} The token for the current cursor position in the
+ *     input box, when multi-input is disabled it will be the full input value.
+ * @private
+ */
+goog.ui.ComboBox.prototype.getTokenText_ = function() {
+  // TODO(user): Implement multi-input such that getToken returns a substring
+  // of the whole input delimited by commas.
+  return goog.string.trim(this.labelInput_.getValue().toLowerCase());
+};
+
+
+/**
+ * @private
+ */
+goog.ui.ComboBox.prototype.setupMenu_ = function() {
+  var sm = this.menu_;
+  sm.setVisible(false);
+  sm.setAllowAutoFocus(false);
+  sm.setAllowHighlightDisabled(true);
+};
+
+
+/**
+ * Shows the menu if it isn't already showing.  Also positions the menu
+ * correctly, resets the menu item visibilities and highlights the relevent
+ * item.
+ * @param {boolean} showAll Whether to show all items, with the first matching
+ *     item highlighted.
+ * @private
+ */
+goog.ui.ComboBox.prototype.maybeShowMenu_ = function(showAll) {
+  var isVisible = this.menu_.isVisible();
+  var numVisibleItems = this.getNumberOfVisibleItems_();
+
+  if (isVisible && numVisibleItems == 0) {
+    this.logger_.fine('no matching items, hiding');
+    this.hideMenu_();
+
+  } else if (!isVisible && numVisibleItems > 0) {
+    if (showAll) {
+      this.logger_.fine('showing menu');
+      this.setItemVisibilityFromToken_('');
+      this.setItemHighlightFromToken_(this.getTokenText_());
+    }
+    // In Safari 2.0, when clicking on the combox box, the blur event is
+    // received after the click event that invokes this function. Since we want
+    // to cancel the dismissal after the blur event is processed, we have to
+    // wait for all event processing to happen.
+    goog.Timer.callOnce(this.clearDismissTimer_, 1, this);
+
+    this.showMenu_();
+  }
+
+  this.positionMenu();
+};
+
+
+/**
+ * Positions the menu.
+ * @protected
+ */
+goog.ui.ComboBox.prototype.positionMenu = function() {
+  if (this.menu_ && this.menu_.isVisible()) {
+    var position = new goog.positioning.MenuAnchoredPosition(this.getElement(),
+        goog.positioning.Corner.BOTTOM_START, true);
+    position.reposition(this.menu_.getElement(),
+        goog.positioning.Corner.TOP_START);
+  }
+};
+
+
+/**
+ * Show the menu and add an active class to the combo box's element.
+ * @private
+ */
+goog.ui.ComboBox.prototype.showMenu_ = function() {
+  this.menu_.setVisible(true);
+  goog.dom.classes.add(this.getElement(),
+      goog.getCssName('goog-combobox-active'));
+};
+
+
+/**
+ * Hide the menu and remove the active class from the combo box's element.
+ * @private
+ */
+goog.ui.ComboBox.prototype.hideMenu_ = function() {
+  this.menu_.setVisible(false);
+  goog.dom.classes.remove(this.getElement(),
+      goog.getCssName('goog-combobox-active'));
+};
+
+
+/**
+ * Clears the dismiss timer if it's active.
+ * @private
+ */
+goog.ui.ComboBox.prototype.clearDismissTimer_ = function() {
+  if (this.dismissTimer_) {
+    goog.Timer.clear(this.dismissTimer_);
+    this.dismissTimer_ = null;
+  }
+};
+
+
+/**
+ * Event handler for when the combo box area has been clicked.
+ * @param {goog.events.BrowserEvent} e The browser event.
+ * @private
+ */
+goog.ui.ComboBox.prototype.onComboMouseDown_ = function(e) {
+  // We only want this event on the element itself or the input or the button.
+  if (this.enabled_ &&
+      (e.target == this.getElement() || e.target == this.input_ ||
+       goog.dom.contains(this.button_, /** @type {Node} */ (e.target)))) {
+    if (this.menu_.isVisible()) {
+      this.logger_.fine('Menu is visible, dismissing');
+      this.dismiss();
+    } else {
+      this.logger_.fine('Opening dropdown');
+      this.maybeShowMenu_(true);
+      if (goog.userAgent.OPERA) {
+        // select() doesn't focus <input> elements in Opera.
+        this.input_.focus();
+      }
+      this.input_.select();
+      this.menu_.setMouseButtonPressed(true);
+      // Stop the click event from stealing focus
+      e.preventDefault();
+    }
+  }
+  // Stop the event from propagating outside of the combo box
+  e.stopPropagation();
+};
+
+
+/**
+ * Event handler for when the document is clicked.
+ * @param {goog.events.BrowserEvent} e The browser event.
+ * @private
+ */
+goog.ui.ComboBox.prototype.onDocClicked_ = function(e) {
+  if (!goog.dom.contains(
+      this.menu_.getElement(), /** @type {Node} */ (e.target))) {
+    this.logger_.info('onDocClicked_() - dismissing immediately');
+    this.dismiss();
+  }
+};
+
+
+/**
+ * Handle the menu's select event.
+ * @param {goog.events.Event} e The event.
+ * @private
+ */
+goog.ui.ComboBox.prototype.onMenuSelected_ = function(e) {
+  this.logger_.info('onMenuSelected_()');
+  var item = /** @type {!goog.ui.MenuItem} */ (e.target);
+  // Stop propagation of the original event and redispatch to allow the menu
+  // select to be cancelled at this level. i.e. if a menu item should cause
+  // some behavior such as a user prompt instead of assigning the caption as
+  // the value.
+  if (this.dispatchEvent(new goog.ui.ItemEvent(
+      goog.ui.Component.EventType.ACTION, this, item))) {
+    var caption = item.getCaption();
+    this.logger_.fine('Menu selection: ' + caption + '. Dismissing menu');
+    if (this.labelInput_.getValue() != caption) {
+      this.labelInput_.setValue(caption);
+      this.dispatchEvent(goog.ui.Component.EventType.CHANGE);
+    }
+    this.dismiss();
+  }
+  e.stopPropagation();
+};
+
+
+/**
+ * Event handler for when the input box looses focus -- hide the menu
+ * @param {goog.events.BrowserEvent} e The browser event.
+ * @private
+ */
+goog.ui.ComboBox.prototype.onInputBlur_ = function(e) {
+  this.logger_.info('onInputBlur_() - delayed dismiss');
+  this.clearDismissTimer_();
+  this.dismissTimer_ = goog.Timer.callOnce(
+      this.dismiss, goog.ui.ComboBox.BLUR_DISMISS_TIMER_MS, this);
+};
+
+
+/**
+ * Handles keyboard events from the input box.  Returns true if the combo box
+ * was able to handle the event, false otherwise.
+ * @param {goog.events.KeyEvent} e Key event to handle.
+ * @return {boolean} Whether the event was handled by the combo box.
+ * @protected
+ * @suppress {visibility} performActionInternal
+ */
+goog.ui.ComboBox.prototype.handleKeyEvent = function(e) {
+  var isMenuVisible = this.menu_.isVisible();
+
+  // Give the menu a chance to handle the event.
+  if (isMenuVisible && this.menu_.handleKeyEvent(e)) {
+    return true;
+  }
+
+  // The menu is either hidden or didn't handle the event.
+  var handled = false;
+  switch (e.keyCode) {
+    case goog.events.KeyCodes.ESC:
+      // If the menu is visible and the user hit Esc, dismiss the menu.
+      if (isMenuVisible) {
+        this.logger_.fine('Dismiss on Esc: ' + this.labelInput_.getValue());
+        this.dismiss();
+        handled = true;
+      }
+      break;
+    case goog.events.KeyCodes.TAB:
+      // If the menu is open and an option is highlighted, activate it.
+      if (isMenuVisible) {
+        var highlighted = this.menu_.getHighlighted();
+        if (highlighted) {
+          this.logger_.fine('Select on Tab: ' + this.labelInput_.getValue());
+          highlighted.performActionInternal(e);
+          handled = true;
+        }
+      }
+      break;
+    case goog.events.KeyCodes.UP:
+    case goog.events.KeyCodes.DOWN:
+      // If the menu is hidden and the user hit the up/down arrow, show it.
+      if (!isMenuVisible) {
+        this.logger_.fine('Up/Down - maybe show menu');
+        this.maybeShowMenu_(true);
+        handled = true;
+      }
+      break;
+  }
+
+  if (handled) {
+    e.preventDefault();
+  }
+
+  return handled;
+};
+
+
+/**
+ * Handles the content of the input box changing.
+ * @param {goog.events.Event} e The INPUT event to handle.
+ * @private
+ */
+goog.ui.ComboBox.prototype.onInputEvent_ = function(e) {
+  // If the key event is text-modifying, update the menu.
+  this.logger_.fine('Key is modifying: ' + this.labelInput_.getValue());
+  this.handleInputChange_();
+};
+
+
+/**
+ * Handles the content of the input box changing, either because of user
+ * interaction or programmatic changes.
+ * @private
+ */
+goog.ui.ComboBox.prototype.handleInputChange_ = function() {
+  var token = this.getTokenText_();
+  this.setItemVisibilityFromToken_(token);
+  if (goog.dom.getActiveElement(this.getDomHelper().getDocument()) ==
+      this.input_) {
+    // Do not alter menu visibility unless the user focus is currently on the
+    // combobox (otherwise programmatic changes may cause the menu to become
+    // visible).
+    this.maybeShowMenu_(false);
+  }
+  var highlighted = this.menu_.getHighlighted();
+  if (token == '' || !highlighted || !highlighted.isVisible()) {
+    this.setItemHighlightFromToken_(token);
+  }
+  this.lastToken_ = token;
+  this.dispatchEvent(goog.ui.Component.EventType.CHANGE);
+};
+
+
+/**
+ * Loops through all menu items setting their visibility according to a token.
+ * @param {string} token The token.
+ * @private
+ */
+goog.ui.ComboBox.prototype.setItemVisibilityFromToken_ = function(token) {
+  this.logger_.info('setItemVisibilityFromToken_() - ' + token);
+  var isVisibleItem = false;
+  var count = 0;
+  var recheckHidden = !this.matchFunction_(token, this.lastToken_);
+
+  for (var i = 0, n = this.menu_.getChildCount(); i < n; i++) {
+    var item = this.menu_.getChildAt(i);
+    if (item instanceof goog.ui.MenuSeparator) {
+      // Ensure that separators are only shown if there is at least one visible
+      // item before them.
+      item.setVisible(isVisibleItem);
+      isVisibleItem = false;
+    } else if (item instanceof goog.ui.MenuItem) {
+      if (!item.isVisible() && !recheckHidden) continue;
+
+      var caption = item.getCaption();
+      var visible = this.isItemSticky_(item) ||
+          caption && this.matchFunction_(caption.toLowerCase(), token);
+      if (typeof item.setFormatFromToken == 'function') {
+        item.setFormatFromToken(token);
+      }
+      item.setVisible(!!visible);
+      isVisibleItem = visible || isVisibleItem;
+
+    } else {
+      // Assume all other items are correctly using their visibility.
+      isVisibleItem = item.isVisible() || isVisibleItem;
+    }
+
+    if (!(item instanceof goog.ui.MenuSeparator) && item.isVisible()) {
+      count++;
+    }
+  }
+
+  this.visibleCount_ = count;
+};
+
+
+/**
+ * Highlights the first token that matches the given token.
+ * @param {string} token The token.
+ * @private
+ */
+goog.ui.ComboBox.prototype.setItemHighlightFromToken_ = function(token) {
+  this.logger_.info('setItemHighlightFromToken_() - ' + token);
+
+  if (token == '') {
+    this.menu_.setHighlightedIndex(-1);
+    return;
+  }
+
+  for (var i = 0, n = this.menu_.getChildCount(); i < n; i++) {
+    var item = this.menu_.getChildAt(i);
+    var caption = item.getCaption();
+    if (caption && this.matchFunction_(caption.toLowerCase(), token)) {
+      this.menu_.setHighlightedIndex(i);
+      if (item.setFormatFromToken) {
+        item.setFormatFromToken(token);
+      }
+      return;
+    }
+  }
+  this.menu_.setHighlightedIndex(-1);
+};
+
+
+/**
+ * Returns true if the item has an isSticky method and the method returns true.
+ * @param {goog.ui.MenuItem} item The item.
+ * @return {boolean} Whether the item has an isSticky method and the method
+ *     returns true.
+ * @private
+ */
+goog.ui.ComboBox.prototype.isItemSticky_ = function(item) {
+  return typeof item.isSticky == 'function' && item.isSticky();
+};
+
+
+
+/**
+ * Class for combo box items.
+ * @param {goog.ui.ControlContent} content Text caption or DOM structure to
+ *     display as the content of the item (use to add icons or styling to
+ *     menus).
+ * @param {Object=} opt_data Identifying data for the menu item.
+ * @param {goog.dom.DomHelper=} opt_domHelper Optional dom helper used for dom
+ *     interactions.
+ * @param {goog.ui.MenuItemRenderer=} opt_renderer Optional renderer.
+ * @constructor
+ * @extends {goog.ui.MenuItem}
+ */
+goog.ui.ComboBoxItem = function(content, opt_data, opt_domHelper,
+    opt_renderer) {
+  goog.ui.MenuItem.call(this, content, opt_data, opt_domHelper, opt_renderer);
+};
+goog.inherits(goog.ui.ComboBoxItem, goog.ui.MenuItem);
+
+
+// Register a decorator factory function for goog.ui.ComboBoxItems.
+goog.ui.registry.setDecoratorByClassName(goog.getCssName('goog-combobox-item'),
+    function() {
+      // ComboBoxItem defaults to using MenuItemRenderer.
+      return new goog.ui.ComboBoxItem(null);
+    });
+
+
+/**
+ * Whether the menu item is sticky, non-sticky items will be hidden as the
+ * user types.
+ * @type {boolean}
+ * @private
+ */
+goog.ui.ComboBoxItem.prototype.isSticky_ = false;
+
+
+/**
+ * Sets the menu item to be sticky or not sticky.
+ * @param {boolean} sticky Whether the menu item should be sticky.
+ */
+goog.ui.ComboBoxItem.prototype.setSticky = function(sticky) {
+  this.isSticky_ = sticky;
+};
+
+
+/**
+ * @return {boolean} Whether the menu item is sticky.
+ */
+goog.ui.ComboBoxItem.prototype.isSticky = function() {
+  return this.isSticky_;
+};
+
+
+/**
+ * Sets the format for a menu item based on a token, bolding the token.
+ * @param {string} token The token.
+ */
+goog.ui.ComboBoxItem.prototype.setFormatFromToken = function(token) {
+  if (this.isEnabled()) {
+    var caption = this.getCaption();
+    var index = caption.toLowerCase().indexOf(token);
+    if (index >= 0) {
+      var domHelper = this.getDomHelper();
+      this.setContent([
+        domHelper.createTextNode(caption.substr(0, index)),
+        domHelper.createDom('b', null, caption.substr(index, token.length)),
+        domHelper.createTextNode(caption.substr(index + token.length))
+      ]);
+    }
+  }
+};
+// Copyright 2007 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+/**
  * @fileoverview Defines a class useful for handling functions that must be
  * invoked after a delay, especially when that delay is frequently restarted.
  * Examples include delaying before displaying a tooltip, menu hysteresis,
@@ -19272,239 +31036,6 @@ goog.async.Delay.prototype.doAction_ = function() {
   if (this.listener_) {
     this.listener_.call(this.handler_);
   }
-};
-// Copyright 2008 The Closure Library Authors. All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS-IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-/**
- * @fileoverview Utilities for creating functions. Loosely inspired by the
- * java classes: http://go/functions.java and http://go/predicate.java.
- *
- * @author nicksantos@google.com (Nick Santos)
- */
-
-
-goog.provide('goog.functions');
-
-
-/**
- * Creates a function that always returns the same value.
- * @param {*} retValue The value to return.
- * @return {!Function} The new function.
- */
-goog.functions.constant = function(retValue) {
-  return function() {
-    return retValue;
-  };
-};
-
-
-/**
- * Always returns false.
- * @type {function(...): boolean}
- */
-goog.functions.FALSE = goog.functions.constant(false);
-
-
-/**
- * Always returns true.
- * @type {function(...): boolean}
- */
-goog.functions.TRUE = goog.functions.constant(true);
-
-
-/**
- * Always returns NULL.
- * @type {function(...): null}
- */
-goog.functions.NULL = goog.functions.constant(null);
-
-
-/**
- * A simple function that returns the first argument of whatever is passed
- * into it.
- * @param {*=} opt_returnValue The single value that will be returned.
- * @param {...*} var_args Optional trailing arguments. These are ignored.
- * @return {?} The first argument passed in, or undefined if nothing was passed.
- *     We can't know the type -- just pass it along without type.
- */
-goog.functions.identity = function(opt_returnValue, var_args) {
-  return opt_returnValue;
-};
-
-
-/**
- * Creates a function that always throws an error with the given message.
- * @param {string} message The error message.
- * @return {!Function} The error-throwing function.
- */
-goog.functions.error = function(message) {
-  return function() {
-    throw Error(message);
-  };
-};
-
-
-/**
- * Given a function, create a function that silently discards all additional
- * arguments.
- * @param {Function} f The original function.
- * @return {!Function} A version of f that discards its arguments.
- */
-goog.functions.lock = function(f) {
-  return function() {
-    return f.call(this);
-  };
-};
-
-
-/**
- * Given a function, create a new function that swallows its return value
- * and replaces it with a new one.
- * @param {Function} f A function.
- * @param {*} retValue A new return value.
- * @return {!Function} A new function.
- */
-goog.functions.withReturnValue = function(f, retValue) {
-  return goog.functions.sequence(f, goog.functions.constant(retValue));
-};
-
-
-/**
- * Creates the composition of the functions passed in.
- * For example, (goog.functions.compose(f, g))(a) is equivalent to f(g(a)).
- * @param {...Function} var_args A list of functions.
- * @return {!Function} The composition of all inputs.
- */
-goog.functions.compose = function(var_args) {
-  var functions = arguments;
-  var length = functions.length;
-  return function() {
-    var result;
-    if (length) {
-      result = functions[length - 1].apply(this, arguments);
-    }
-
-    for (var i = length - 2; i >= 0; i--) {
-      result = functions[i].call(this, result);
-    }
-    return result;
-  };
-};
-
-
-/**
- * Creates a function that calls the functions passed in in sequence, and
- * returns the value of the last function. For example,
- * (goog.functions.sequence(f, g))(x) is equivalent to f(x),g(x).
- * @param {...Function} var_args A list of functions.
- * @return {!Function} A function that calls all inputs in sequence.
- */
-goog.functions.sequence = function(var_args) {
-  var functions = arguments;
-  var length = functions.length;
-  return function() {
-    var result;
-    for (var i = 0; i < length; i++) {
-      result = functions[i].apply(this, arguments);
-    }
-    return result;
-  };
-};
-
-
-/**
- * Creates a function that returns true if each of its components evaluates
- * to true. The components are evaluated in order, and the evaluation will be
- * short-circuited as soon as a function returns false.
- * For example, (goog.functions.and(f, g))(x) is equivalent to f(x) && g(x).
- * @param {...Function} var_args A list of functions.
- * @return {!Function} A function that ANDs its component functions.
- */
-goog.functions.and = function(var_args) {
-  var functions = arguments;
-  var length = functions.length;
-  return function() {
-    for (var i = 0; i < length; i++) {
-      if (!functions[i].apply(this, arguments)) {
-        return false;
-      }
-    }
-    return true;
-  };
-};
-
-
-/**
- * Creates a function that returns true if any of its components evaluates
- * to true. The components are evaluated in order, and the evaluation will be
- * short-circuited as soon as a function returns true.
- * For example, (goog.functions.or(f, g))(x) is equivalent to f(x) || g(x).
- * @param {...Function} var_args A list of functions.
- * @return {!Function} A function that ORs its component functions.
- */
-goog.functions.or = function(var_args) {
-  var functions = arguments;
-  var length = functions.length;
-  return function() {
-    for (var i = 0; i < length; i++) {
-      if (functions[i].apply(this, arguments)) {
-        return true;
-      }
-    }
-    return false;
-  };
-};
-
-
-/**
- * Creates a function that returns the Boolean opposite of a provided function.
- * For example, (goog.functions.not(f))(x) is equivalent to !f(x).
- * @param {!Function} f The original function.
- * @return {!Function} A function that delegates to f and returns opposite.
- */
-goog.functions.not = function(f) {
-  return function() {
-    return !f.apply(this, arguments);
-  };
-};
-
-
-/**
- * Generic factory function to construct an object given the constructor
- * and the arguments. Intended to be bound to create object factories.
- *
- * Callers should cast the result to the appropriate type for proper type
- * checking by the compiler.
- * @param {!Function} constructor The constructor for the Object.
- * @param {...*} var_args The arguments to be passed to the constructor.
- * @return {!Object} A new instance of the class given in {@code constructor}.
- */
-goog.functions.create = function(constructor, var_args) {
-  /** @constructor */
-  var temp = function() {};
-  temp.prototype = constructor.prototype;
-
-  // obj will have constructor's prototype in its chain and
-  // 'obj instanceof constructor' will be true.
-  var obj = new temp();
-
-  // obj is initialized by constructor.
-  // arguments is only array-like so lacks shift(), but can be used with
-  // the Array prototype function.
-  constructor.apply(obj, Array.prototype.slice.call(arguments, 1));
-  return obj;
 };
 // Copyright 2012 The Closure Library Authors. All Rights Reserved.
 //
@@ -20837,427 +32368,427 @@ goog.provide('lu.albert.closure.fx.easing');
 goog.require('goog.debug.Logger');
 
 
-/**
- * "Back" easing.
- *
- * Animation "overshoots" the target slightly and backtracks to it's
- * destination.
- */
-lu.albert.closure.fx.easing.Back = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @param {float} s ?
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Back.easeIn = function(t, b, c, d, s) {
-  if (!goog.isDefAndNotNull(s)) {
-    s = 1.70158;
-  }
-  return c * (t /= d) * t * ((s + 1) * t - s) + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @param {float} s ?
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Back.easeOut = function(t, b, c, d, s) {
-  if (!goog.isDefAndNotNull(s)) {
-    s = 1.70158;
-  }
-  return c * ((t = t / d - 1) * t * ((s + 1) * t + s) + 1) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @param {float} s TODO!
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Back.easeInOut = function(t, b, c, d, s) {
-  if (!goog.isDefAndNotNull(s)) {
-    s = 1.70158;
-  }
-  if ((t /= d / 2) < 1) {
-    return c / 2 * (t * t * (((s *= (1.525)) + 1) * t - s)) + b;
-  }
-  return c / 2 * ((t -= 2) * t * (((s *= (1.525)) + 1) * t + s) + 2) + b;
-};
-
-
-/**
- * "Bounces" at the destination.
- * Best results when using the ``easeOut`` method.
- */
-lu.albert.closure.fx.easing.Bounce = function() {
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Bounce.easeOut = function(t, b, c, d) {
-  if ((t /= d) < (1 / 2.75)) {
-    return c * (7.5625 * t * t) + b;
-  } else if (t < (2 / 2.75)) {
-    return c * (7.5625 * (t -= (1.5 / 2.75)) * t + .75) + b;
-  } else if (t < (2.5 / 2.75)) {
-    return c * (7.5625 * (t -= (2.25 / 2.75)) * t + .9375) + b;
-  } else {
-    return c * (7.5625 * (t -= (2.625 / 2.75)) * t + .984375) + b;
-  }
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Bounce.easeIn = function(t, b, c, d) {
-  return c - lu.albert.closure.fx.easing.Bounce.easeOut(d - t, 0, c, d) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Bounce.easeInOut = function(t, b, c, d) {
-  if (t < d / 2) {
-    return lu.albert.closure.fx.easing.Bounce.easeIn(t * 2, 0, c, d) * .5 + b;
-  } else {
-    return lu.albert.closure.fx.easing.Bounce.easeOut(t * 2 - d, 0, c, d) *
-        .5 + c * .5 + b;
-  }
-};
-
-
-/**
- * Circular accelleration.
- */
-lu.albert.closure.fx.easing.Circ = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Circ.easeIn = function(t, b, c, d) {
-  return -c * (Math.sqrt(1 - (t /= d) * t) - 1) + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Circ.easeOut = function(t, b, c, d) {
-  return c * Math.sqrt(1 - (t = t / d - 1) * t) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Circ.easeInOut = function(t, b, c, d) {
-  if ((t /= d / 2) < 1) {
-    return -c / 2 * (Math.sqrt(1 - t * t) - 1) + b;
-  }
-  return c / 2 * (Math.sqrt(1 - (t -= 2) * t) + 1) + b;
-};
-
-
-/**
- * Cubic accelleration.
- */
-lu.albert.closure.fx.easing.Cubic = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
-  return c * (t /= d) * t * t + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Cubic.easeOut = function(t, b, c, d) {
-  return c * ((t = t / d - 1) * t * t + 1) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Cubic.easeInOut = function(t, b, c, d) {
-  if ((t /= d / 2) < 1) {
-    return c / 2 * t * t * t + b;
-  }
-  return c / 2 * ((t -= 2) * t * t + 2) + b;
-};
-
-
-/**
- * Slightly overshoots the target and "jitters" into position.
- *
- * Best results by using ``easeOut`` or ``easeInOut``
- */
-lu.albert.closure.fx.easing.Elastic = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @param {float} a TODO!
- * @param {float} p TODO!
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Elastic.easeIn = function(t, b, c, d, a, p) {
-  if (t == 0) {
-    return b;
-  }
-
-  if ((t /= d) == 1) {
-    return b + c;
-  }
-
-  if (!p) {
-    p = d * .3;
-  }
-
-  if (!a || a < Math.abs(c)) {
-    a = c;
-    var s = p / 4;
-  } else {
-    var s = p / (2 * Math.PI) * Math.asin(c / a);
-  }
-  return -(a * Math.pow(2, 10 * (t -= 1)) *
-      Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @param {float} a TODO!
- * @param {float} p TODO!
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Elastic.easeOut = function(t, b, c, d, a, p) {
-  if (t == 0) {
-    return b;
-  }
-
-  if ((t /= d) == 1) {
-    return b + c;
-  }
-
-  if (!p) {
-    p = d * .3;
-  }
-
-  if (!a || a < Math.abs(c)) {
-    a = c;
-    var s = p / 4;
-  }
-
-  else var s = p / (2 * Math.PI) * Math.asin(c / a);
-  return (a * Math.pow(2, -10 * t) *
-      Math.sin((t * d - s) * (2 * Math.PI) / p) + c + b);
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @param {float} a TODO!
- * @param {float} p TODO!
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Elastic.easeInOut = function(t, b, c, d, a, p) {
-  if (t == 0) {
-    return b;
-  }
-
-  if ((t /= d / 2) == 2) {
-    return b + c;
-  }
-
-  if (!p) {
-    p = d * (.3 * 1.5);
-  }
-
-  if (!a || a < Math.abs(c)) {
-    a = c;
-    var s = p / 4;
-  } else {
-    var s = p / (2 * Math.PI) * Math.asin(c / a);
-  }
-
-  if (t < 1) {
-    return -.5 * (a * Math.pow(2, 10 * (t -= 1)) *
-        Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
-  }
-
-  return a * Math.pow(2, - 10 * (t -= 1)) *
-      Math.sin((t * d - s) * (2 * Math.PI) / p) * .5 + c + b;
-};
-
-
-/**
- * Exponential acceleration.
- */
-lu.albert.closure.fx.easing.Expo = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Expo.easeIn = function(t, b, c, d) {
-  if (t == 0) {
-    return b;
-  }
-  return c * Math.pow(2, 10 * (t / d - 1)) + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Expo.easeOut = function(t, b, c, d) {
-  if (t == d) {
-    return b + c;
-  }
-  return c * (-Math.pow(2, -10 * t / d) + 1) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Expo.easeInOut = function(t, b, c, d) {
-  if (t == 0) {
-    return b;
-  }
-
-  if (t == d) {
-    return b + c;
-  }
-
-  if ((t /= d / 2) < 1) {
-    return c / 2 * Math.pow(2, 10 * (t - 1)) + b;
-  }
-
-  return c / 2 * (-Math.pow(2, -10 * --t) + 2) + b;
-};
-
-
+// /**
+//  * "Back" easing.
+//  *
+//  * Animation "overshoots" the target slightly and backtracks to it's
+//  * destination.
+//  */
+// lu.albert.closure.fx.easing.Back = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @param {float} s ?
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Back.easeIn = function(t, b, c, d, s) {
+//   if (!goog.isDefAndNotNull(s)) {
+//     s = 1.70158;
+//   }
+//   return c * (t /= d) * t * ((s + 1) * t - s) + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @param {float} s ?
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Back.easeOut = function(t, b, c, d, s) {
+//   if (!goog.isDefAndNotNull(s)) {
+//     s = 1.70158;
+//   }
+//   return c * ((t = t / d - 1) * t * ((s + 1) * t + s) + 1) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @param {float} s TODO!
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Back.easeInOut = function(t, b, c, d, s) {
+//   if (!goog.isDefAndNotNull(s)) {
+//     s = 1.70158;
+//   }
+//   if ((t /= d / 2) < 1) {
+//     return c / 2 * (t * t * (((s *= (1.525)) + 1) * t - s)) + b;
+//   }
+//   return c / 2 * ((t -= 2) * t * (((s *= (1.525)) + 1) * t + s) + 2) + b;
+// };
+// 
+// 
+// /**
+//  * "Bounces" at the destination.
+//  * Best results when using the ``easeOut`` method.
+//  */
+// lu.albert.closure.fx.easing.Bounce = function() {
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Bounce.easeOut = function(t, b, c, d) {
+//   if ((t /= d) < (1 / 2.75)) {
+//     return c * (7.5625 * t * t) + b;
+//   } else if (t < (2 / 2.75)) {
+//     return c * (7.5625 * (t -= (1.5 / 2.75)) * t + .75) + b;
+//   } else if (t < (2.5 / 2.75)) {
+//     return c * (7.5625 * (t -= (2.25 / 2.75)) * t + .9375) + b;
+//   } else {
+//     return c * (7.5625 * (t -= (2.625 / 2.75)) * t + .984375) + b;
+//   }
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Bounce.easeIn = function(t, b, c, d) {
+//   return c - lu.albert.closure.fx.easing.Bounce.easeOut(d - t, 0, c, d) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Bounce.easeInOut = function(t, b, c, d) {
+//   if (t < d / 2) {
+//     return lu.albert.closure.fx.easing.Bounce.easeIn(t * 2, 0, c, d) * .5 + b;
+//   } else {
+//     return lu.albert.closure.fx.easing.Bounce.easeOut(t * 2 - d, 0, c, d) *
+//         .5 + c * .5 + b;
+//   }
+// };
+// 
+// 
+// /**
+//  * Circular accelleration.
+//  */
+// lu.albert.closure.fx.easing.Circ = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Circ.easeIn = function(t, b, c, d) {
+//   return -c * (Math.sqrt(1 - (t /= d) * t) - 1) + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Circ.easeOut = function(t, b, c, d) {
+//   return c * Math.sqrt(1 - (t = t / d - 1) * t) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Circ.easeInOut = function(t, b, c, d) {
+//   if ((t /= d / 2) < 1) {
+//     return -c / 2 * (Math.sqrt(1 - t * t) - 1) + b;
+//   }
+//   return c / 2 * (Math.sqrt(1 - (t -= 2) * t) + 1) + b;
+// };
+// 
+// 
+// /**
+//  * Cubic accelleration.
+//  */
+// lu.albert.closure.fx.easing.Cubic = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
+//   return c * (t /= d) * t * t + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Cubic.easeOut = function(t, b, c, d) {
+//   return c * ((t = t / d - 1) * t * t + 1) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Cubic.easeInOut = function(t, b, c, d) {
+//   if ((t /= d / 2) < 1) {
+//     return c / 2 * t * t * t + b;
+//   }
+//   return c / 2 * ((t -= 2) * t * t + 2) + b;
+// };
+// 
+// 
+// /**
+//  * Slightly overshoots the target and "jitters" into position.
+//  *
+//  * Best results by using ``easeOut`` or ``easeInOut``
+//  */
+// lu.albert.closure.fx.easing.Elastic = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @param {float} a TODO!
+//  * @param {float} p TODO!
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Elastic.easeIn = function(t, b, c, d, a, p) {
+//   if (t == 0) {
+//     return b;
+//   }
+// 
+//   if ((t /= d) == 1) {
+//     return b + c;
+//   }
+// 
+//   if (!p) {
+//     p = d * .3;
+//   }
+// 
+//   if (!a || a < Math.abs(c)) {
+//     a = c;
+//     var s = p / 4;
+//   } else {
+//     var s = p / (2 * Math.PI) * Math.asin(c / a);
+//   }
+//   return -(a * Math.pow(2, 10 * (t -= 1)) *
+//       Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @param {float} a TODO!
+//  * @param {float} p TODO!
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Elastic.easeOut = function(t, b, c, d, a, p) {
+//   if (t == 0) {
+//     return b;
+//   }
+// 
+//   if ((t /= d) == 1) {
+//     return b + c;
+//   }
+// 
+//   if (!p) {
+//     p = d * .3;
+//   }
+// 
+//   if (!a || a < Math.abs(c)) {
+//     a = c;
+//     var s = p / 4;
+//   }
+// 
+//   else var s = p / (2 * Math.PI) * Math.asin(c / a);
+//   return (a * Math.pow(2, -10 * t) *
+//       Math.sin((t * d - s) * (2 * Math.PI) / p) + c + b);
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @param {float} a TODO!
+//  * @param {float} p TODO!
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Elastic.easeInOut = function(t, b, c, d, a, p) {
+//   if (t == 0) {
+//     return b;
+//   }
+// 
+//   if ((t /= d / 2) == 2) {
+//     return b + c;
+//   }
+// 
+//   if (!p) {
+//     p = d * (.3 * 1.5);
+//   }
+// 
+//   if (!a || a < Math.abs(c)) {
+//     a = c;
+//     var s = p / 4;
+//   } else {
+//     var s = p / (2 * Math.PI) * Math.asin(c / a);
+//   }
+// 
+//   if (t < 1) {
+//     return -.5 * (a * Math.pow(2, 10 * (t -= 1)) *
+//         Math.sin((t * d - s) * (2 * Math.PI) / p)) + b;
+//   }
+// 
+//   return a * Math.pow(2, - 10 * (t -= 1)) *
+//       Math.sin((t * d - s) * (2 * Math.PI) / p) * .5 + c + b;
+// };
+// 
+// 
+// /**
+//  * Exponential acceleration.
+//  */
+// lu.albert.closure.fx.easing.Expo = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Expo.easeIn = function(t, b, c, d) {
+//   if (t == 0) {
+//     return b;
+//   }
+//   return c * Math.pow(2, 10 * (t / d - 1)) + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Expo.easeOut = function(t, b, c, d) {
+//   if (t == d) {
+//     return b + c;
+//   }
+//   return c * (-Math.pow(2, -10 * t / d) + 1) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Expo.easeInOut = function(t, b, c, d) {
+//   if (t == 0) {
+//     return b;
+//   }
+// 
+//   if (t == d) {
+//     return b + c;
+//   }
+// 
+//   if ((t /= d / 2) < 1) {
+//     return c / 2 * Math.pow(2, 10 * (t - 1)) + b;
+//   }
+// 
+//   return c / 2 * (-Math.pow(2, -10 * --t) + 2) + b;
+// };
+// 
+// 
 /**
  * Linear speed.
  */
@@ -21269,14 +32800,17 @@ lu.albert.closure.fx.easing.Linear = function() {
  * This is just here for completeness. It calculates the position using a
  * linear speed. No acceleration, so it's fairly uninteresting.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeNone = function(t, b, c, d) {
-  return c * t / d + b;
+lu.albert.closure.fx.easing.Linear.easeNone = function(p) {
+  var out = p;
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+  return out;
 };
 
 
@@ -21284,44 +32818,32 @@ lu.albert.closure.fx.easing.Linear.easeNone = function(t, b, c, d) {
  * Ease In function.
  * Identical to ``easeNone``.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeIn = function(t, b, c, d) {
-  return c * t / d + b;
-};
+lu.albert.closure.fx.easing.Linear.easeIn =
+    lu.albert.closure.fx.easing.Linear.easeNone;
 
 
 /**
  * Ease Out function.
  * Identical to ``easeNone``.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeOut = function(t, b, c, d) {
-  return c * t / d + b;
-};
+lu.albert.closure.fx.easing.Linear.easeOut =
+    lu.albert.closure.fx.easing.Linear.easeNone;
 
 
 /**
  * Ease InOut function.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeInOut = function(t, b, c, d) {
-  return c * t / d + b;
-};
+lu.albert.closure.fx.easing.Linear.easeInOut =
+    lu.albert.closure.fx.easing.Linear.easeNone;
 
 
 /**
@@ -21368,174 +32890,180 @@ lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
 /**
  * Ease InOut function.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Quad.easeInOut = function(t, b, c, d) {
-  if ((t /= d / 2) < 1) {
-    return c / 2 * t * t + b;
+lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
+  var out = p;
+  if (p < 0.5) {
+    out = Math.pow(2 * p * Math.sqrt(0.5), 2);
+  } else {
+    out = -Math.pow(2 * (p-1) * Math.sqrt(0.5), 2)+1;
   }
 
-  return -c / 2 * ((--t) * (t - 2) - 1) + b;
-};
-
-
-/**
- * Quartic (x^4) accelleration.
- */
-lu.albert.closure.fx.easing.Quart = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Quart.easeIn = function(t, b, c, d) {
-  return c * (t /= d) * t * t * t + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Quart.easeOut = function(t, b, c, d) {
-  return -c * ((t = t / d - 1) * t * t * t - 1) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Quart.easeInOut = function(t, b, c, d) {
-  if ((t /= d / 2) < 1) {
-    return c / 2 * t * t * t * t + b;
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
   }
 
-  return -c / 2 * ((t -= 2) * t * t * t - 2) + b;
+  return out;
 };
 
 
-/**
- * Quintic (x^5) accelleration.
- */
-lu.albert.closure.fx.easing.Quint = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Quint.easeIn = function(t, b, c, d) {
-  return c * (t /= d) * t * t * t * t + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Quint.easeOut = function(t, b, c, d) {
-  return c * ((t = t / d - 1) * t * t * t * t + 1) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Quint.easeInOut = function(t, b, c, d) {
-  if ((t /= d / 2) < 1) {
-    return c / 2 * t * t * t * t * t + b;
-  }
-
-  return c / 2 * ((t -= 2) * t * t * t * t + 2) + b;
-};
-
-
-/**
- * Sinosoidal acceleration (based on cosine).
- */
-lu.albert.closure.fx.easing.Sine = function() {
-};
-
-
-/**
- * Ease In function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Sine.easeIn = function(t, b, c, d) {
-  return -c * Math.cos(t / d * (Math.PI / 2)) + c + b;
-};
-
-
-/**
- * Ease Out function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Sine.easeOut = function(t, b, c, d) {
-  return c * Math.sin(t / d * (Math.PI / 2)) + b;
-};
-
-
-/**
- * Ease InOut function.
- *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
- */
-lu.albert.closure.fx.easing.Sine.easeInOut = function(t, b, c, d) {
-  return -c / 2 * (Math.cos(Math.PI * t / d) - 1) + b;
-};
+// /**
+//  * Quartic (x^4) accelleration.
+//  */
+// lu.albert.closure.fx.easing.Quart = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Quart.easeIn = function(t, b, c, d) {
+//   return c * (t /= d) * t * t * t + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Quart.easeOut = function(t, b, c, d) {
+//   return -c * ((t = t / d - 1) * t * t * t - 1) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Quart.easeInOut = function(t, b, c, d) {
+//   if ((t /= d / 2) < 1) {
+//     return c / 2 * t * t * t * t + b;
+//   }
+// 
+//   return -c / 2 * ((t -= 2) * t * t * t - 2) + b;
+// };
+// 
+// 
+// /**
+//  * Quintic (x^5) accelleration.
+//  */
+// lu.albert.closure.fx.easing.Quint = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Quint.easeIn = function(t, b, c, d) {
+//   return c * (t /= d) * t * t * t * t + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Quint.easeOut = function(t, b, c, d) {
+//   return c * ((t = t / d - 1) * t * t * t * t + 1) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Quint.easeInOut = function(t, b, c, d) {
+//   if ((t /= d / 2) < 1) {
+//     return c / 2 * t * t * t * t * t + b;
+//   }
+// 
+//   return c / 2 * ((t -= 2) * t * t * t * t + 2) + b;
+// };
+// 
+// 
+// /**
+//  * Sinosoidal acceleration (based on cosine).
+//  */
+// lu.albert.closure.fx.easing.Sine = function() {
+// };
+// 
+// 
+// /**
+//  * Ease In function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Sine.easeIn = function(t, b, c, d) {
+//   return -c * Math.cos(t / d * (Math.PI / 2)) + c + b;
+// };
+// 
+// 
+// /**
+//  * Ease Out function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Sine.easeOut = function(t, b, c, d) {
+//   return c * Math.sin(t / d * (Math.PI / 2)) + b;
+// };
+// 
+// 
+// /**
+//  * Ease InOut function.
+//  *
+//  * @param {float} t time.
+//  * @param {float} b begin.
+//  * @param {float} c change.
+//  * @param {float} d duration (in ms).
+//  * @return {float} The position at time t.
+//  */
+// lu.albert.closure.fx.easing.Sine.easeInOut = function(t, b, c, d) {
+//   return -c / 2 * (Math.cos(Math.PI * t / d) - 1) + b;
+// };
 
 
 lu.albert.closure.fx.easing.LOGGER = goog.debug.Logger.getLogger('lu.albert.closure.fx.easing');
@@ -21545,8 +33073,10 @@ goog.require('goog.dom');
 goog.require('goog.events');
 goog.require('goog.events.EventType');
 goog.require('goog.fx.Animation');
-goog.require('lu.albert.closure.fx.easing');
+goog.require('goog.ui.ComboBox');
+goog.require('goog.ui.ComboBoxItem');
 
+goog.require('lu.albert.closure.fx.easing');
 goog.provide('lu.albert.closure.fx.easing.demo');
 goog.provide('lu.albert.closure.fx.easing.demo.Plotter');
 
@@ -21559,6 +33089,8 @@ lu.albert.closure.fx.easing.demo = function() {
 
   this.sprite = null;
   this.log = goog.debug.Logger.getLogger('demo');
+  this.func_map = {};
+  this.easingFunction = lu.albert.closure.fx.easing.Quad.easeOut;
 
 };
 
@@ -21582,6 +33114,8 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
   this.plotter = new lu.albert.closure.fx.easing.demo.Plotter(
       'PlotBackground', 'PlotForeground');
 
+  this.setUpSelector('AccelSelector');
+
   goog.events.listen(goog.dom.getElement('DummyCanvas'),
       goog.events.EventType.CLICK,
       function(evt) {
@@ -21594,7 +33128,7 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
           var endy = evt.clientY - 25 - this.offsetY;
 
           var anim = new goog.fx.Animation([startx, starty], [endx, endy], 500,
-            lu.albert.closure.fx.easing.Quad.easeOut);
+            this.easingFunction);
           var animationevents = [goog.fx.Animation.EventType.BEGIN,
                                  goog.fx.Animation.EventType.ANIMATE,
                                  goog.fx.Animation.EventType.END];
@@ -21613,14 +33147,53 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
 
 
 /**
+ * Sets up the selector for the easing function.
+ *
+ * @param {string} id The HTML ID of the container of the combo-box.
+ */
+lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
+  var funs = [
+    ['Linear speed', lu.albert.closure.fx.easing.Linear.easeNone],
+    ['Quadratic Ease In', lu.albert.closure.fx.easing.Quad.easeIn],
+    ['Quadratic Ease Out', lu.albert.closure.fx.easing.Quad.easeOut],
+    ['Quadratic Ease In/Out', lu.albert.closure.fx.easing.Quad.easeInOut]
+  ];
+
+  // store references to the functions, so we can get at them when the user
+  // selects one in the combobox.
+  goog.array.forEach(funs, function(element) {
+    this.func_map[element[0]] = element[1];
+  }, this);
+  console.log(this.func_map);
+  var cb = new goog.ui.ComboBox();
+  cb.setUseDropdownArrow(true);
+  cb.setDefaultText('Select an easing function...');
+  var caption = new goog.ui.ComboBoxItem('Select function...');
+  caption.setSticky(true);
+  caption.setEnabled(false);
+  cb.addItem(caption);
+  goog.array.forEach(funs, function(elem) {
+      var item = new goog.ui.ComboBoxItem(elem[0]);
+      cb.addItem(item);
+      }, this);
+  cb.render(goog.dom.getElement(id));
+  goog.events.listen(cb, 'change', function(evt) {
+    this.easingFunction = this.func_map[evt.target.getValue()];
+  }, null, this);
+};
+
+
+/**
  * Sets up logging for this instance.
  */
 lu.albert.closure.fx.easing.demo.prototype.setUpLogging = function() {
   this.logConsole = new goog.debug.DivConsole(
       goog.dom.getElement('LogConsole'));
   this.logConsole.setCapturing(true);
+  goog.debug.Logger.getLogger('goog.ui.ComboBox').setLevel(
+      goog.debug.Logger.Level.OFF);
   goog.debug.Logger.getLogger('lu.albert.closure.fx.easing').setLevel(
-      goog.debug.Logger.Level.FINEST);
+      goog.debug.Logger.Level.ALL);
 };
 
 

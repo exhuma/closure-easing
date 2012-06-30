@@ -4,8 +4,10 @@ goog.require('goog.dom');
 goog.require('goog.events');
 goog.require('goog.events.EventType');
 goog.require('goog.fx.Animation');
-goog.require('lu.albert.closure.fx.easing');
+goog.require('goog.ui.ComboBox');
+goog.require('goog.ui.ComboBoxItem');
 
+goog.require('lu.albert.closure.fx.easing');
 goog.provide('lu.albert.closure.fx.easing.demo');
 goog.provide('lu.albert.closure.fx.easing.demo.Plotter');
 
@@ -18,6 +20,8 @@ lu.albert.closure.fx.easing.demo = function() {
 
   this.sprite = null;
   this.log = goog.debug.Logger.getLogger('demo');
+  this.func_map = {};
+  this.easingFunction = lu.albert.closure.fx.easing.Quad.easeOut;
 
 };
 
@@ -41,6 +45,8 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
   this.plotter = new lu.albert.closure.fx.easing.demo.Plotter(
       'PlotBackground', 'PlotForeground');
 
+  this.setUpSelector('AccelSelector');
+
   goog.events.listen(goog.dom.getElement('DummyCanvas'),
       goog.events.EventType.CLICK,
       function(evt) {
@@ -53,7 +59,7 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
           var endy = evt.clientY - 25 - this.offsetY;
 
           var anim = new goog.fx.Animation([startx, starty], [endx, endy], 500,
-            lu.albert.closure.fx.easing.Quad.easeOut);
+            this.easingFunction);
           var animationevents = [goog.fx.Animation.EventType.BEGIN,
                                  goog.fx.Animation.EventType.ANIMATE,
                                  goog.fx.Animation.EventType.END];
@@ -72,14 +78,51 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
 
 
 /**
+ * Sets up the selector for the easing function.
+ *
+ * @param {string} id The HTML ID of the container of the combo-box.
+ */
+lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
+  var funs = [
+    ['Quadratic Ease In', lu.albert.closure.fx.easing.Quad.easeIn],
+    ['Quadratic Ease Out', lu.albert.closure.fx.easing.Quad.easeOut]
+  ];
+
+  // store references to the functions, so we can get at them when the user
+  // selects one in the combobox.
+  goog.array.forEach(funs, function(element) {
+    this.func_map[element[0]] = element[1];
+  }, this);
+  console.log(this.func_map);
+  var cb = new goog.ui.ComboBox();
+  cb.setUseDropdownArrow(true);
+  cb.setDefaultText('Select an easing function...');
+  var caption = new goog.ui.ComboBoxItem('Select function...');
+  caption.setSticky(true);
+  caption.setEnabled(false);
+  cb.addItem(caption);
+  goog.array.forEach(funs, function(elem) {
+      var item = new goog.ui.ComboBoxItem(elem[0]);
+      cb.addItem(item);
+      }, this);
+  cb.render(goog.dom.getElement(id));
+  goog.events.listen(cb, 'change', function(evt) {
+    this.easingFunction = this.func_map[evt.target.getValue()];
+  }, null, this);
+};
+
+
+/**
  * Sets up logging for this instance.
  */
 lu.albert.closure.fx.easing.demo.prototype.setUpLogging = function() {
   this.logConsole = new goog.debug.DivConsole(
       goog.dom.getElement('LogConsole'));
   this.logConsole.setCapturing(true);
+  goog.debug.Logger.getLogger('goog.ui.ComboBox').setLevel(
+      goog.debug.Logger.Level.OFF);
   goog.debug.Logger.getLogger('lu.albert.closure.fx.easing').setLevel(
-      goog.debug.Logger.Level.FINEST);
+      goog.debug.Logger.Level.ALL);
 };
 
 

@@ -40,12 +40,37 @@
           z-index: 1;
       }
 
+      #Help {
+          width: 200px;
+          font-size: small;
+          font-family: Vardana, Tahoma, Arial, sans-serif;
+          float: right;
+          border-left: 1px solid black;
+          border-bottom: 1px solid black;
+          padding: 1em;
+          margin-right: -50px;
+          margin-top: -50px;
+      }
+
       BODY {
           margin: 50px;
       }
     </style>
 </head>
 <body>
+    <div id="Help">
+        Click into <strong>the left rectangle</strong> to trigger the animation
+        with it's easing function.
+        <br/><br />
+        The <strong>plotter</strong> shows the speed in function of position/time.
+        <br/><br />
+        The <strong>logger</strong> displays the raw data values (rounded to 3
+        decimal places).
+        <hr />
+        Currently only one easing function is implemented, and only the
+        "easeIn" part is enabled in this page. I will add a control to the page
+        to change the active accelerator eventually.
+    </div>
     <div id="DummyCanvas"><div id="Sprite"></div></div>
     <div id="LogConsole"></div>
     <canvas id="PlotForeground" width="300" height="300"></canvas>

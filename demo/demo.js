@@ -150,5 +150,3 @@ lu.albert.closure.fx.easing.demo.Plotter.prototype.drawGrid = function() {
   this.bgctx.strokeStyle = this.gridColor;
   this.bgctx.stroke();
 };
-
-// vim: iabbrev lac lu.albert.closure.fx.easing.demo :

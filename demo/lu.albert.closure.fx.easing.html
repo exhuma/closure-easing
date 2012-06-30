@@ -24,6 +24,22 @@
         border: 1px dashed #666;
         overflow: auto;
       }
+
+      #PlotBackground, #PlotForeground {
+          position: absolute;
+          left: 50px;
+          top: 540px;
+      }
+
+      #PlotBackground {
+          border: 1px solid black;
+          z-index: 0;
+      }
+
+      #PlotForeground {
+          z-index: 1;
+      }
+
       BODY {
           margin: 50px;
       }
@@ -32,6 +48,8 @@
 <body>
     <div id="DummyCanvas"><div id="Sprite"></div></div>
     <div id="LogConsole"></div>
+    <canvas id="PlotForeground" width="300" height="300"></canvas>
+    <canvas id="PlotBackground" width="300" height="300"></canvas>
     <script type="text/javascript" charset="utf-8">
         var app = new lu.albert.closure.fx.easing.demo();
         app.init();

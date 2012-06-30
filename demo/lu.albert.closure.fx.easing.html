@@ -15,6 +15,15 @@
         width: 640px;
         height: 480px;
       }
+      #LogConsole {
+        width: 640px;
+        height: 480px;
+        position: absolute;
+        left: 700px;
+        top: 50px;
+        border: 1px dashed #666;
+        overflow: auto;
+      }
       BODY {
           margin: 50px;
       }
@@ -22,6 +31,7 @@
 </head>
 <body>
     <div id="DummyCanvas"><div id="Sprite"></div></div>
+    <div id="LogConsole"></div>
     <script type="text/javascript" charset="utf-8">
         var app = new lu.albert.closure.fx.easing.demo();
         app.init();

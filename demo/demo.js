@@ -1,3 +1,5 @@
+goog.require('goog.debug.DivConsole');
+goog.require('goog.debug.Logger');
 goog.require('goog.dom');
 goog.require('goog.events');
 goog.require('goog.events.EventType');
@@ -9,11 +11,14 @@ goog.provide('lu.albert.closure.fx.easing.demo');
 lu.albert.closure.fx.easing.demo = function() {
 
   this.sprite = null;
+  this.log = goog.debug.Logger.getLogger('demo');
 
 };
 
 
 lu.albert.closure.fx.easing.demo.prototype.init = function() {
+
+  this.setUpLogging();
 
   this.offsetX = 50;  // page margin.
   this.offsetY = 50;  // page margin.
@@ -28,12 +33,15 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
   goog.events.listen(goog.dom.getElement('DummyCanvas'),
       goog.events.EventType.CLICK,
       function(evt) {
+          this.logConsole.clear();
+          this.log.info('New click event! Clearing console...');
           var startx = parseInt(this.sprite.style.left.slice(0, -2));
           var starty = parseInt(this.sprite.style.top.slice(0, -2));
           var endx = evt.clientX-25-this.offsetX;
           var endy = evt.clientY-25-this.offsetY;
 
-          var anim = new goog.fx.Animation([startx, starty], [endx, endy], 500, function(t) { return Math.pow(t, 5); });
+          var anim = new goog.fx.Animation([startx, starty], [endx, endy], 500,
+            lu.albert.closure.fx.easing.Quad.easeOut);
           var animationevents = [goog.fx.Animation.EventType.BEGIN,
                                  goog.fx.Animation.EventType.ANIMATE,
                                  goog.fx.Animation.EventType.END];
@@ -45,5 +53,16 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
 
       }, null, this);
 
+  this.log.info('Demo code successfully loaded!');
+
 };
+
+
+lu.albert.closure.fx.easing.demo.prototype.setUpLogging = function() {
+  this.logConsole = new goog.debug.DivConsole(goog.dom.getElement('LogConsole'));
+  this.logConsole.setCapturing(true);
+  goog.debug.Logger.getLogger('lu.albert.closure.fx.easing').setLevel(
+      goog.debug.Logger.Level.FINEST);
+};
+
 

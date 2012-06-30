@@ -7,6 +7,8 @@
 
 goog.provide('lu.albert.closure.fx.easing');
 
+goog.require('goog.debug.Logger');
+
 
 /**
  * "Back" easing.
@@ -505,28 +507,34 @@ lu.albert.closure.fx.easing.Quad = function() {
 /**
  * Ease In function.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Quad.easeIn = function(t, b, c, d) {
-  return c * (t /= d) * t + b;
+lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
+  var out = Math.pow(p, 2);
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+  return out;
 };
 
 
 /**
  * Ease Out function.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Quad.easeOut = function(t, b, c, d) {
-  return -c * (t /= d) * (t - 2) + b;
+lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
+  var out = Math.sqrt(p);
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+  return out;
 };
 
 
@@ -701,3 +709,6 @@ lu.albert.closure.fx.easing.Sine.easeOut = function(t, b, c, d) {
 lu.albert.closure.fx.easing.Sine.easeInOut = function(t, b, c, d) {
   return -c / 2 * (Math.cos(Math.PI * t / d) - 1) + b;
 };
+
+
+lu.albert.closure.fx.easing.LOGGER = goog.debug.Logger.getLogger('lu.albert.closure.fx.easing');

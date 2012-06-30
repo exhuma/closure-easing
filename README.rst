@@ -14,5 +14,10 @@ subfolder called "lib". The folder's structure should look like this::
           +- known_issues
       +- third-party
 
-When downloading the library, and looking into it's contents, this should
-become clearer.
+The shell script "install_closure.sh" will set everything up for you.
+
+
+.. note::
+
+    The closure library is downloaded using SVN. So you need ``subversion``
+    installed to run the installer script!

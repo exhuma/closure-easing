@@ -446,7 +446,13 @@ lu.albert.closure.fx.easing.Linear = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.easeNone = function(p) {
-  return p;
+  var out = p;
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+  return out;
 };
 
 

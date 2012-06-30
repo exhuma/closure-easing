@@ -84,6 +84,7 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
  */
 lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
   var funs = [
+    ['Linear speed', lu.albert.closure.fx.easing.Linear.easeNone],
     ['Quadratic Ease In', lu.albert.closure.fx.easing.Quad.easeIn],
     ['Quadratic Ease Out', lu.albert.closure.fx.easing.Quad.easeOut]
   ];

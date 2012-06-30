@@ -442,14 +442,11 @@ lu.albert.closure.fx.easing.Linear = function() {
  * This is just here for completeness. It calculates the position using a
  * linear speed. No acceleration, so it's fairly uninteresting.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeNone = function(t, b, c, d) {
-  return c * t / d + b;
+lu.albert.closure.fx.easing.Linear.easeNone = function(p) {
+  return p;
 };
 
 
@@ -457,44 +454,32 @@ lu.albert.closure.fx.easing.Linear.easeNone = function(t, b, c, d) {
  * Ease In function.
  * Identical to ``easeNone``.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeIn = function(t, b, c, d) {
-  return c * t / d + b;
-};
+lu.albert.closure.fx.easing.Linear.easeIn =
+    lu.albert.closure.fx.easing.Linear.easeNone;
 
 
 /**
  * Ease Out function.
  * Identical to ``easeNone``.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeOut = function(t, b, c, d) {
-  return c * t / d + b;
-};
+lu.albert.closure.fx.easing.Linear.easeOut =
+    lu.albert.closure.fx.easing.Linear.easeNone;
 
 
 /**
  * Ease InOut function.
  *
- * @param {float} t time.
- * @param {float} b begin.
- * @param {float} c change.
- * @param {float} d duration (in ms).
- * @return {float} The position at time t.
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
  */
-lu.albert.closure.fx.easing.Linear.easeInOut = function(t, b, c, d) {
-  return c * t / d + b;
-};
+lu.albert.closure.fx.easing.Linear.easeInOut =
+    lu.albert.closure.fx.easing.Linear.easeNone;
 
 
 /**

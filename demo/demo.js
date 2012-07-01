@@ -87,7 +87,9 @@ lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
     ['Linear speed', lu.albert.closure.fx.easing.Linear.easeNone],
     ['Quadratic Ease In', lu.albert.closure.fx.easing.Quad.easeIn],
     ['Quadratic Ease Out', lu.albert.closure.fx.easing.Quad.easeOut],
-    ['Quadratic Ease In/Out', lu.albert.closure.fx.easing.Quad.easeInOut]
+    ['Quadratic Ease In/Out', lu.albert.closure.fx.easing.Quad.easeInOut],
+    ['Cubic Ease In', lu.albert.closure.fx.easing.Cubic.easeIn],
+    ['Cubic Ease Out', lu.albert.closure.fx.easing.Cubic.easeOut]
   ];
 
   // store references to the functions, so we can get at them when the user

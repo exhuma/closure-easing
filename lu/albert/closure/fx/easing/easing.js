@@ -135,25 +135,48 @@ lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
 };
 
 
-// /**
-//  * Cubic accelleration.
-//  */
-// lu.albert.closure.fx.easing.Cubic = function() {
-// };
+/**
+ * Cubic accelleration.
+ */
+lu.albert.closure.fx.easing.Cubic = function() {
+};
 
 
-// /**
-//  * Ease In function.
-//  */
-// lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
-// };
+/**
+ * Ease In function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
+  var out = p;
+  out = Math.pow(p, 3);
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+  return out;
+};
 
 
-// /**
-//  * Ease Out function.
-//  */
-// lu.albert.closure.fx.easing.Cubic.easeOut = function(t, b, c, d) {
-// };
+/**
+ * Ease Out function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Cubic.easeOut = function(p) {
+  var out = p;
+  out = Math.pow(p, 1.0 / 3.0);
+  if (goog.DEBUG) {
+    lu.albert.closure.fx.easing.LOGGER.finest(
+        'In: ' + p.toFixed(3) +
+        ' -> Out: ' + out.toFixed(3));
+  }
+
+  return out;
+};
 
 
 // /**

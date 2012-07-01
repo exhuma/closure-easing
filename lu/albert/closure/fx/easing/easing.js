@@ -225,25 +225,39 @@ lu.albert.closure.fx.easing.Quart.easeOut = function(p) {
 // };
 
 
-// /**
-//  * Quintic (x^5) accelleration.
-//  */
-// lu.albert.closure.fx.easing.Quint = function() {
-// };
+/**
+ * Quintic (x^5) accelleration.
+ */
+lu.albert.closure.fx.easing.Quint = function() {
+};
 
 
-// /**
-//  * Ease In function.
-//  */
-// lu.albert.closure.fx.easing.Quint.easeIn = function(t, b, c, d) {
-// };
+/**
+ * Ease In function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Quint.easeIn = function(p) {
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    return Math.pow(p, 5);
+  });
+  return f(p);
+};
 
 
-// /**
-//  * Ease Out function.
-//  */
-// lu.albert.closure.fx.easing.Quint.easeOut = function(t, b, c, d) {
-// };
+/**
+ * Ease Out function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Quint.easeOut = function(p) {
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    return Math.pow(p, 1.0 / 5.0);
+  });
+  return f(p);
+};
 
 
 // /**

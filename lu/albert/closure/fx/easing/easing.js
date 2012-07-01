@@ -141,6 +141,20 @@ lu.albert.closure.fx.easing.Linear.easeInOut =
 
 
 /**
+ * Ping-Pong function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Linear.pingPong = function(p) {
+  var f = lu.albert.closure.fx.easing._loggedCall(function(x) {
+      return -Math.abs(2 * x - 1) + 1;
+  });
+  return f(p);
+};
+
+
+/**
  * Quadratic acceleration.
  */
 lu.albert.closure.fx.easing.Quad = function() {
@@ -324,6 +338,7 @@ lu.albert.closure.fx.easing.Quint.easeInOut = function(p) {
 };
 
 ///// Basic /////////////////////////////////////////////////////////////////
+
 
 // /**
 //  * Sinosoidal acceleration (based on cosine).

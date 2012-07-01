@@ -101,7 +101,6 @@ lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
   goog.array.forEach(funs, function(element) {
     this.func_map[element[0]] = element[1];
   }, this);
-  console.log(this.func_map);
   var cb = new goog.ui.ComboBox();
   cb.setUseDropdownArrow(true);
   cb.setDefaultText('Select an easing function...');

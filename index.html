@@ -53,6 +53,23 @@
           left: 50px;
       }
 
+      #ColorSwatch {
+          position: absolute;
+          background-color: #000;
+          width: 100px;
+          height: 100px;
+          border: 1px solid black;
+          left: 400px;
+          top: 540px;
+      }
+
+      #btnPalette {
+          position: absolute;
+          left: 400px;
+          top: 650px;
+          border: 1px solid black;
+      }
+
       BODY {
           margin: 50px;
       }
@@ -292,26 +309,85 @@
           padding-left: 4px;
         }
     </style>
+    <style type="text/css" media="screen">
+        /*
+         * Copyright 2009 The Closure Library Authors. All Rights Reserved.
+         *
+         * Use of this source code is governed by the Apache License, Version 2.0.
+         * See the COPYING file for details.
+         */
+
+        /*
+         * Standard styling for color palettes.
+         *
+         * @author pupius@google.com (Daniel Pupius)
+         * @author attila@google.com (Attila Bodis)
+         */
+
+
+        .goog-palette-cell .goog-palette-colorswatch {
+          border: none;
+          font-size: x-small;
+          height: 18px;
+          position: relative;
+          width: 18px;
+        }
+
+        .goog-palette-cell-hover .goog-palette-colorswatch {
+          border: 1px solid #fff;
+          height: 16px;
+          width: 16px;
+        }
+
+        .goog-palette-cell-selected .goog-palette-colorswatch {
+          /* Client apps may override the URL at which they serve the sprite. */
+          background: url(//ssl.gstatic.com/editor/editortoolbar.png) no-repeat -368px 0;
+          border: 1px solid #333;
+          color: #fff;
+          font-weight: bold;
+          height: 16px;
+          width: 16px;
+        }
+
+        .goog-palette-customcolor {
+          background-color: #fafafa;
+          border: 1px solid #eee;
+          color: #666;
+          font-size: x-small;
+          height: 15px;
+          position: relative;
+          width: 15px;
+        }
+
+        .goog-palette-cell-hover .goog-palette-customcolor {
+          background-color: #fee;
+          border: 1px solid #f66;
+          color: #f66;
+        }
+    </style>
 </head>
 <body>
     <div id="Help">
+        <h4>Help</h4>
         Click into <strong>the left rectangle</strong> to trigger the animation
-        with it's easing function.
+        with the selected easing function.
         <br/><br />
         The <strong>plotter</strong> shows the speed in function of position/time.
         <br/><br />
         The <strong>logger</strong> displays the raw data values (rounded to 3
         decimal places).
-        <hr />
-        Currently only one easing function is implemented, and only the
-        "easeIn" part is enabled in this page. I will add a control to the page
-        to change the active accelerator eventually.
+        <br/><br />
+        Clicking on a <strong>color swatch in the palette</strong> will trigger
+        a simple RGB based color blend. Again using the selected easing
+        function.
     </div>
     <div id="AccelSelector"></div>
     <div id="DummyCanvas"><div id="Sprite"></div></div>
     <div id="LogConsole"></div>
     <canvas id="PlotForeground" width="300" height="300"></canvas>
     <canvas id="PlotBackground" width="300" height="300"></canvas>
+    <div id="ColorSwatch"></div>
+    <div id="btnPalette"></div>
     <script type="text/javascript" charset="utf-8">
         var app = new lu.albert.closure.fx.easing.demo();
         app.init();

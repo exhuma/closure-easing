@@ -90,6 +90,7 @@ lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
     ['Quadratic Ease In/Out', lu.albert.closure.fx.easing.Quad.easeInOut],
     ['Cubic Ease In', lu.albert.closure.fx.easing.Cubic.easeIn],
     ['Cubic Ease Out', lu.albert.closure.fx.easing.Cubic.easeOut],
+    ['Cubic Ease In/Out', lu.albert.closure.fx.easing.Cubic.easeInOut],
     ['Quartic Ease In', lu.albert.closure.fx.easing.Quart.easeIn],
     ['Quartic Ease Out', lu.albert.closure.fx.easing.Quart.easeOut],
     ['Quintic Ease In', lu.albert.closure.fx.easing.Quint.easeIn],

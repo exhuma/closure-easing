@@ -4,6 +4,8 @@ goog.require('goog.dom');
 goog.require('goog.events');
 goog.require('goog.events.EventType');
 goog.require('goog.fx.Animation');
+goog.require('goog.fx.dom');
+goog.require('goog.ui.ColorPalette');
 goog.require('goog.ui.ComboBox');
 goog.require('goog.ui.ComboBoxItem');
 
@@ -27,6 +29,56 @@ lu.albert.closure.fx.easing.demo = function() {
 
 
 /**
+ * Plotter decorator.
+ * Functions decorated with this, will have their output values plotted on the
+ * in-page garph. This is meant to plot easing functions taking and returning
+ * values from 0 to 1. Other values may not be represented properly. On the
+ * other hand, some easing functions may "overshoot" their target, returning
+ * values > 1, but returning to 1. This is fine, and the plotter contains some
+ * spare room to accomodate this case.
+ *
+ * @param {lu.albert.closure.fx.easing.demo.Plotter} plotter The plotter.
+ * @param {function} f The function to be plotted.
+ * @return {function} The decorated function.
+ */
+lu.albert.closure.fx.easing.demo._plotted = function(plotter, f) {
+  return function(x) {
+    var result = f(x);
+    plotter.drawPoint(x, result);
+    return result;
+  };
+};
+
+
+/**
+ * Converts a hex string to rgb values.
+ *
+ * @param {string} cssText The CSS color spec (only hex and rgb are supported).
+ * @return {array} An 3-element (r,g,b) array or [0,0,0] on error.
+ */
+lu.albert.closure.fx.easing.demo.cssColorToRGB = function(cssText) {
+
+  if (cssText[0] == '#') {
+    var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(cssText);
+    console.log('hexres = ' + result);
+    return result ? [
+      parseInt(result[1], 16),
+      parseInt(result[2], 16),
+      parseInt(result[3], 16)
+    ] : [0, 0, 0];
+  } else {
+    var result = /rgb\(([0-9]+), ([0-9]+), ([0-9]+)\)/i.exec(cssText);
+    console.log('rgbres = ' + result);
+    return result ? [
+      parseInt(result[1]),
+      parseInt(result[2]),
+      parseInt(result[3])
+    ] : [0, 0, 0];
+  }
+};
+
+
+/**
  * Class initialisor (run after everything is ready).
  */
 lu.albert.closure.fx.easing.demo.prototype.init = function() {
@@ -35,6 +87,7 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
 
   this.offsetX = 50;  // page margin.
   this.offsetY = 50;  // page margin.
+  this.colorSwatch = goog.dom.getElement('ColorSwatch');
   this.sprite = goog.dom.getElement('Sprite');
   this.sprite.style.position = 'relative';
   this.sprite.style.backgroundColor = '#000';
@@ -59,18 +112,47 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
           var endy = evt.clientY - 25 - this.offsetY;
 
           var anim = new goog.fx.Animation([startx, starty], [endx, endy], 500,
-            this.easingFunction);
+            lu.albert.closure.fx.easing.demo._plotted(this.plotter,
+              this.easingFunction));
           var animationevents = [goog.fx.Animation.EventType.BEGIN,
                                  goog.fx.Animation.EventType.ANIMATE,
                                  goog.fx.Animation.EventType.END];
           goog.events.listen(anim, animationevents, function(t) {
-            this.plotter.drawPoint(t.progress, t.anim.accel_(t.progress));
             this.sprite.style.left = t.x + 'px';
             this.sprite.style.top = t.y + 'px';
           }, null, this);
           anim.play();
 
       }, null, this);
+
+  this.picker = new goog.ui.ColorPalette([
+    '#ffffff', '#000000',
+    '#EA9999', '#F9CB9C', '#FFE599', '#B6D7A8',
+    '#A2C4C9', '#9FC5E8', '#B4A7D6', '#D5A6BD',
+    '#E06666', '#F6B26B', '#FFD966', '#93C47D',
+    '#76A5AF', '#6FA8DC', '#8E7CC3', '#C27BA0',
+    '#CC0000', '#E69138', '#F1C232', '#6AA84F',
+    '#45818E', '#3D85C6', '#674EA7', '#A64D79'
+    ]);
+  this.picker.setSize(8);
+  this.picker.render(goog.dom.getElement('btnPalette'));
+  goog.events.listen(this.picker,
+      goog.ui.Component.EventType.ACTION, function(evt) {
+        this.logConsole.clear();
+        this.plotter.clear();
+        var palette = evt.target;
+        var endColor = lu.albert.closure.fx.easing.demo.cssColorToRGB(
+          palette.getSelectedColor());
+        console.log(this.colorSwatch.style);
+        var startColor = lu.albert.closure.fx.easing.demo.cssColorToRGB(
+          this.colorSwatch.style.backgroundColor);
+        var anim = new goog.fx.dom.BgColorTransform(
+          this.colorSwatch, startColor, endColor, 500,
+          lu.albert.closure.fx.easing.demo._plotted(this.plotter,
+            this.easingFunction));
+        anim.play();
+      }, false, this);
+  console.log(this.picker);
 
   this.log.info('Demo code successfully loaded!');
 

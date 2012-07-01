@@ -234,11 +234,24 @@ lu.albert.closure.fx.easing.Quart.easeOut = function(p) {
 };
 
 
-// /**
-//  * Ease InOut function.
-//  */
-// lu.albert.closure.fx.easing.Quart.easeInOut = function(t, b, c, d) {
-// };
+/**
+ * Ease InOut function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Quart.easeInOut = function(p) {
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    var out = p;
+    if (p < 0.5) {
+      out = 8 * Math.pow(p, 4);
+    } else {
+      out = -8 * Math.pow(p - 1, 4) + 1;
+    }
+    return out;
+  });
+  return f(p);
+};
 
 
 /**

@@ -10,6 +10,30 @@ goog.provide('lu.albert.closure.fx.easing');
 goog.require('goog.debug.Logger');
 
 
+/**
+ * Calls function ``f`` while logging the resulting values if necessary.
+ * Note: This expects the function ``f`` to take only one parameter!
+ *
+ * @param {function} f The function that needs logging.
+ * @return {function} A function where the in/out parameter is logged.
+ */
+lu.albert.closure.fx.easing._loggedCall = function(f) {
+
+  var loggedFunc = function(p) {
+    var out = f(p);
+    if (goog.DEBUG) {
+      lu.albert.closure.fx.easing.LOGGER.finest(
+        p.toFixed(3) +
+        ' -> ' + out.toFixed(3));
+    }
+    return out;
+  };
+
+  return loggedFunc;
+
+};
+
+
 ///// Simple ////////////////////////////////////////////////////////////////
 
 
@@ -28,13 +52,8 @@ lu.albert.closure.fx.easing.Linear = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.easeNone = function(p) {
-  var out = p;
-  if (goog.DEBUG) {
-    lu.albert.closure.fx.easing.LOGGER.finest(
-        'In: ' + p.toFixed(3) +
-        ' -> Out: ' + out.toFixed(3));
-  }
-  return out;
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {return p;});
+  return f(p);
 };
 
 
@@ -84,13 +103,10 @@ lu.albert.closure.fx.easing.Quad = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
-  var out = Math.pow(p, 2);
-  if (goog.DEBUG) {
-    lu.albert.closure.fx.easing.LOGGER.finest(
-        'In: ' + p.toFixed(3) +
-        ' -> Out: ' + out.toFixed(3));
-  }
-  return out;
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    return Math.pow(p, 2);
+  });
+  return f(p);
 };
 
 
@@ -101,13 +117,10 @@ lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
-  var out = Math.sqrt(p);
-  if (goog.DEBUG) {
-    lu.albert.closure.fx.easing.LOGGER.finest(
-        'In: ' + p.toFixed(3) +
-        ' -> Out: ' + out.toFixed(3));
-  }
-  return out;
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    return Math.sqrt(p, 2);
+  });
+  return f(p);
 };
 
 
@@ -118,20 +131,16 @@ lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
-  var out = p;
-  if (p < 0.5) {
-    out = Math.pow(2 * p * Math.sqrt(0.5), 2);
-  } else {
-    out = -Math.pow(2 * (p - 1) * Math.sqrt(0.5), 2) + 1;
-  }
-
-  if (goog.DEBUG) {
-    lu.albert.closure.fx.easing.LOGGER.finest(
-        'In: ' + p.toFixed(3) +
-        ' -> Out: ' + out.toFixed(3));
-  }
-
-  return out;
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    var out = p;
+    if (p < 0.5) {
+      out = Math.pow(2 * p * Math.sqrt(0.5), 2);
+    } else {
+      out = -Math.pow(2 * (p - 1) * Math.sqrt(0.5), 2) + 1;
+    }
+    return out;
+  });
+  return f(p);
 };
 
 
@@ -149,14 +158,10 @@ lu.albert.closure.fx.easing.Cubic = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
-  var out = p;
-  out = Math.pow(p, 3);
-  if (goog.DEBUG) {
-    lu.albert.closure.fx.easing.LOGGER.finest(
-        'In: ' + p.toFixed(3) +
-        ' -> Out: ' + out.toFixed(3));
-  }
-  return out;
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    return Math.pow(p, 3);
+  });
+  return f(p);
 };
 
 
@@ -167,15 +172,10 @@ lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeOut = function(p) {
-  var out = p;
-  out = Math.pow(p, 1.0 / 3.0);
-  if (goog.DEBUG) {
-    lu.albert.closure.fx.easing.LOGGER.finest(
-        'In: ' + p.toFixed(3) +
-        ' -> Out: ' + out.toFixed(3));
-  }
-
-  return out;
+  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
+    return Math.pow(p, 1.0 / 3.0);
+  });
+  return f(p);
 };
 
 

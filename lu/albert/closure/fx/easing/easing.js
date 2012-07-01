@@ -34,7 +34,58 @@ lu.albert.closure.fx.easing._loggedCall = function(f) {
 };
 
 
-///// Simple ////////////////////////////////////////////////////////////////
+/**
+ * Creates an ease in/out function for polynomials.
+ *
+ * @param {int} p The power of the polynomial.
+ * @return {function} A function which can be used for "in/out" easings.
+ */
+lu.albert.closure.fx.easing._polynomialInOut = function(p) {
+  var fun = function(x) {
+    if (x < 0.5) {
+      return Math.pow(2, p - 1) * Math.pow(x, p);
+    } else {
+      var a = Math.pow(2, p - 1);
+      if (p % 2 == 0) {
+        return -a * Math.pow(x - 1, p) + 1;
+      } else {
+        return a * Math.pow(x - 1, p) + 1;
+      }
+    }
+  };
+  return fun;
+};
+
+
+/**
+ * Creates an ease in function for polynomials.
+ *
+ * @param {int} p The power of the polynomial.
+ * @return {function} A function which can be used for "in" easings.
+ */
+lu.albert.closure.fx.easing._polynomialIn = function(p) {
+  var fun = function(x) {
+    return Math.pow(x, p);
+  };
+  return fun;
+};
+
+
+/**
+ * Creates an ease out function for polynomials.
+ *
+ * @param {int} p The power of the polynomial.
+ * @return {function} A function which can be used for "out" easings.
+ */
+lu.albert.closure.fx.easing._polynomialOut = function(p) {
+  var fun = function(x) {
+    return Math.pow(x, 1.0 / p);
+  };
+  return fun;
+};
+
+
+///// Very Simple (Convenience) /////////////////////////////////////////////
 
 
 /**
@@ -103,9 +154,8 @@ lu.albert.closure.fx.easing.Quad = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.pow(p, 2);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialIn(2));
   return f(p);
 };
 
@@ -117,9 +167,8 @@ lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.sqrt(p, 2);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialOut(2));
   return f(p);
 };
 
@@ -131,15 +180,8 @@ lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    var out = p;
-    if (p < 0.5) {
-      out = Math.pow(2 * p * Math.sqrt(0.5), 2);
-    } else {
-      out = -Math.pow(2 * (p - 1) * Math.sqrt(0.5), 2) + 1;
-    }
-    return out;
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+      lu.albert.closure.fx.easing._polynomialInOut(2));
   return f(p);
 };
 
@@ -158,9 +200,8 @@ lu.albert.closure.fx.easing.Cubic = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.pow(p, 3);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialIn(3));
   return f(p);
 };
 
@@ -172,9 +213,8 @@ lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.pow(p, 1.0 / 3.0);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialOut(3));
   return f(p);
 };
 
@@ -186,15 +226,8 @@ lu.albert.closure.fx.easing.Cubic.easeOut = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeInOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    var out = p;
-    if (p < 0.5) {
-      out = 4 * Math.pow(p, 3);
-    } else {
-      out = 4 * Math.pow((p - 1), 3) + 1;
-    }
-    return out;
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+      lu.albert.closure.fx.easing._polynomialInOut(3));
   return f(p);
 };
 
@@ -213,9 +246,8 @@ lu.albert.closure.fx.easing.Quart = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quart.easeIn = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-      return Math.pow(p, 4);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialIn(4));
   return f(p);
 };
 
@@ -227,9 +259,8 @@ lu.albert.closure.fx.easing.Quart.easeIn = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quart.easeOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.pow(p, 1.0 / 4.0);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialOut(4));
   return f(p);
 };
 
@@ -241,15 +272,8 @@ lu.albert.closure.fx.easing.Quart.easeOut = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quart.easeInOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    var out = p;
-    if (p < 0.5) {
-      out = 8 * Math.pow(p, 4);
-    } else {
-      out = -8 * Math.pow(p - 1, 4) + 1;
-    }
-    return out;
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+      lu.albert.closure.fx.easing._polynomialInOut(4));
   return f(p);
 };
 
@@ -268,9 +292,8 @@ lu.albert.closure.fx.easing.Quint = function() {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quint.easeIn = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.pow(p, 5);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialIn(5));
   return f(p);
 };
 
@@ -282,9 +305,8 @@ lu.albert.closure.fx.easing.Quint.easeIn = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quint.easeOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    return Math.pow(p, 1.0 / 5.0);
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing._polynomialOut(5));
   return f(p);
 };
 
@@ -296,20 +318,12 @@ lu.albert.closure.fx.easing.Quint.easeOut = function(p) {
  * @return {float} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quint.easeInOut = function(p) {
-  var f = lu.albert.closure.fx.easing._loggedCall(function(p) {
-    var out = p;
-    if (p < 0.5) {
-      out = 16 * Math.pow(p, 5);
-    } else {
-      out = 16 * Math.pow((p - 1), 5) + 1;
-    }
-    return out;
-  });
+  var f = lu.albert.closure.fx.easing._loggedCall(
+      lu.albert.closure.fx.easing._polynomialInOut(5));
   return f(p);
 };
 
-
-
+///// Basic /////////////////////////////////////////////////////////////////
 
 // /**
 //  * Sinosoidal acceleration (based on cosine).

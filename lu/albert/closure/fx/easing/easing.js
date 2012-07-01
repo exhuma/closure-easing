@@ -10,73 +10,7 @@ goog.provide('lu.albert.closure.fx.easing');
 goog.require('goog.debug.Logger');
 
 
-// /**
-//  * "Back" easing.
-//  *
-//  * Animation "overshoots" the target slightly and backtracks to it's
-//  * destination.
-//  */
-// lu.albert.closure.fx.easing.Back = function() {
-// };
-
-
-// /**
-//  * "Bounces" at the destination.
-//  * Best results when using the ``easeOut`` method.
-//  */
-// lu.albert.closure.fx.easing.Bounce = function() {
-// };
-
-
-// /**
-//  * Circular accelleration.
-//  */
-// lu.albert.closure.fx.easing.Circ = function() {
-// };
-
-
-// /**
-//  * Cubic accelleration.
-//  */
-// lu.albert.closure.fx.easing.Cubic = function() {
-// };
-
-
-// /**
-//  * Ease In function.
-//  */
-// lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
-// };
-
-
-// /**
-//  * Ease Out function.
-//  */
-// lu.albert.closure.fx.easing.Cubic.easeOut = function(t, b, c, d) {
-// };
-
-
-// /**
-//  * Ease InOut function.
-//  */
-// lu.albert.closure.fx.easing.Cubic.easeInOut = function(t, b, c, d) {
-// };
-
-
-// /**
-//  * Slightly overshoots the target and "jitters" into position.
-//  *
-//  * Best results by using ``easeOut`` or ``easeInOut``
-//  */
-// lu.albert.closure.fx.easing.Elastic = function() {
-// };
-
-
-// /**
-//  * Exponential acceleration.
-//  */
-// lu.albert.closure.fx.easing.Expo = function() {
-// };
+///// Simple ////////////////////////////////////////////////////////////////
 
 
 /**
@@ -202,6 +136,34 @@ lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
 
 
 // /**
+//  * Cubic accelleration.
+//  */
+// lu.albert.closure.fx.easing.Cubic = function() {
+// };
+
+
+// /**
+//  * Ease In function.
+//  */
+// lu.albert.closure.fx.easing.Cubic.easeIn = function(t, b, c, d) {
+// };
+
+
+// /**
+//  * Ease Out function.
+//  */
+// lu.albert.closure.fx.easing.Cubic.easeOut = function(t, b, c, d) {
+// };
+
+
+// /**
+//  * Ease InOut function.
+//  */
+// lu.albert.closure.fx.easing.Cubic.easeInOut = function(t, b, c, d) {
+// };
+
+
+// /**
 //  * Quartic (x^4) accelleration.
 //  */
 // lu.albert.closure.fx.easing.Quart = function() {
@@ -261,6 +223,50 @@ lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
 //  * Sinosoidal acceleration (based on cosine).
 //  */
 // lu.albert.closure.fx.easing.Sine = function() {
+// };
+
+
+// /**
+//  * Exponential acceleration.
+//  */
+// lu.albert.closure.fx.easing.Expo = function() {
+// };
+
+
+// /**
+//  * Circular accelleration.
+//  */
+// lu.albert.closure.fx.easing.Circ = function() {
+// };
+
+
+///// Complex ///////////////////////////////////////////////////////////////
+
+
+// /**
+//  * "Back" easing.
+//  *
+//  * Animation "overshoots" the target slightly and backtracks to it's
+//  * destination.
+//  */
+// lu.albert.closure.fx.easing.Back = function() {
+// };
+
+
+// /**
+//  * "Bounces" at the destination.
+//  * Best results when using the ``easeOut`` method.
+//  */
+// lu.albert.closure.fx.easing.Bounce = function() {
+// };
+
+
+// /**
+//  * Slightly overshoots the target and "jitters" into position.
+//  *
+//  * Best results by using ``easeOut`` or ``easeInOut``
+//  */
+// lu.albert.closure.fx.easing.Elastic = function() {
 // };
 
 

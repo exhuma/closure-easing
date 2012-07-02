@@ -179,7 +179,9 @@ lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
     ['Quartic Ease In/Out', lu.albert.closure.fx.easing.Quart.easeInOut],
     ['Quintic Ease In', lu.albert.closure.fx.easing.Quint.easeIn],
     ['Quintic Ease Out', lu.albert.closure.fx.easing.Quint.easeOut],
-    ['Quintic Ease In/Out', lu.albert.closure.fx.easing.Quint.easeInOut]
+    ['Quintic Ease In/Out', lu.albert.closure.fx.easing.Quint.easeInOut],
+    ['Sinusoidal Ease In/Out', lu.albert.closure.fx.easing.Sine.easeInOut],
+    ['Sinusoidal ping-pong', lu.albert.closure.fx.easing.Sine.pingPong]
   ];
 
   // store references to the functions, so we can get at them when the user

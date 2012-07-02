@@ -340,11 +340,50 @@ lu.albert.closure.fx.easing.Quint.easeInOut = function(p) {
 ///// Basic /////////////////////////////////////////////////////////////////
 
 
-// /**
-//  * Sinosoidal acceleration (based on cosine).
-//  */
-// lu.albert.closure.fx.easing.Sine = function() {
-// };
+/**
+ * Sinosoidal acceleration (based on cosine).
+ */
+lu.albert.closure.fx.easing.Sine = function() {
+};
+
+/**
+ * Create a sinosoidal easing function. TIP: If the factor is even, the value
+ * will return to 0. For uneven factors, it will move to 1.
+ *
+ * @param {int} f The factor (frequency).
+ * @return {function} A function which can be used for easings.
+ */
+lu.albert.closure.fx.easing.Sine._generic = function(f) {
+  var fun = function(x) {
+    return Math.cos(f * Math.PI * x + Math.PI) / 2 + 0.5;
+  };
+  return fun;
+};
+
+
+/**
+ * Ease InOut function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Sine.easeInOut = function(p) {
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing.Sine._generic(1));
+  return f(p);
+};
+
+/**
+ * Ping-Pong function.
+ *
+ * @param {float} p parametric position.
+ * @return {float} Translated parametric position.
+ */
+lu.albert.closure.fx.easing.Sine.pingPong = function(p) {
+  var f = lu.albert.closure.fx.easing._loggedCall(
+    lu.albert.closure.fx.easing.Sine._generic(2));
+  return f(p);
+};
 
 
 // /**

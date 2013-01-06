@@ -38,8 +38,8 @@ lu.albert.closure.fx.easing.demo = function() {
  * spare room to accomodate this case.
  *
  * @param {lu.albert.closure.fx.easing.demo.Plotter} plotter The plotter.
- * @param {function} f The function to be plotted.
- * @return {function} The decorated function.
+ * @param {function(number)} f The function to be plotted.
+ * @return {function(number)} The decorated function.
  */
 lu.albert.closure.fx.easing.demo._plotted = function(plotter, f) {
   return function(x) {
@@ -54,13 +54,12 @@ lu.albert.closure.fx.easing.demo._plotted = function(plotter, f) {
  * Converts a hex string to rgb values.
  *
  * @param {string} cssText The CSS color spec (only hex and rgb are supported).
- * @return {array} An 3-element (r,g,b) array or [0,0,0] on error.
+ * @return {Array.<number>} An 3-element (r,g,b) array or [0,0,0] on error.
  */
 lu.albert.closure.fx.easing.demo.cssColorToRGB = function(cssText) {
 
   if (cssText[0] == '#') {
     var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(cssText);
-    console.log('hexres = ' + result);
     return result ? [
       parseInt(result[1], 16),
       parseInt(result[2], 16),
@@ -68,11 +67,10 @@ lu.albert.closure.fx.easing.demo.cssColorToRGB = function(cssText) {
     ] : [0, 0, 0];
   } else {
     var result = /rgb\(([0-9]+), ([0-9]+), ([0-9]+)\)/i.exec(cssText);
-    console.log('rgbres = ' + result);
     return result ? [
-      parseInt(result[1]),
-      parseInt(result[2]),
-      parseInt(result[3])
+      parseInt(result[1], 10),
+      parseInt(result[2], 10),
+      parseInt(result[3], 10)
     ] : [0, 0, 0];
   }
 };
@@ -106,8 +104,8 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
           this.logConsole.clear();
           this.plotter.clear();
           this.log.info('New click event! Clearing console...');
-          var startx = parseInt(this.sprite.style.left.slice(0, -2));
-          var starty = parseInt(this.sprite.style.top.slice(0, -2));
+          var startx = parseInt(this.sprite.style.left.slice(0, -2), 10);
+          var starty = parseInt(this.sprite.style.top.slice(0, -2), 10);
           var endx = evt.clientX - 25 - this.offsetX;
           var endy = evt.clientY - 25 - this.offsetY;
 
@@ -120,10 +118,10 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
           goog.events.listen(anim, animationevents, function(t) {
             this.sprite.style.left = t.x + 'px';
             this.sprite.style.top = t.y + 'px';
-          }, null, this);
+          }, false, this);
           anim.play();
 
-      }, null, this);
+      }, false, this);
 
   this.picker = new goog.ui.ColorPalette([
     '#ffffff', '#000000',
@@ -143,7 +141,6 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
         var palette = evt.target;
         var endColor = lu.albert.closure.fx.easing.demo.cssColorToRGB(
           palette.getSelectedColor());
-        console.log(this.colorSwatch.style);
         var startColor = lu.albert.closure.fx.easing.demo.cssColorToRGB(
           this.colorSwatch.style.backgroundColor);
         var anim = new goog.fx.dom.BgColorTransform(
@@ -152,7 +149,6 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
             this.easingFunction));
         anim.play();
       }, false, this);
-  console.log(this.picker);
 
   this.log.info('Demo code successfully loaded!');
 
@@ -203,7 +199,7 @@ lu.albert.closure.fx.easing.demo.prototype.setUpSelector = function(id) {
   cb.render(goog.dom.getElement(id));
   goog.events.listen(cb, 'change', function(evt) {
     this.easingFunction = this.func_map[evt.target.getValue()];
-  }, null, this);
+  }, false, this);
 };
 
 
@@ -266,8 +262,8 @@ lu.albert.closure.fx.easing.demo.Plotter.prototype.clear = function() {
  * Draws a point on the graph. It expects the input values to be parametric (as
  * passed to/returned by the easing function).
  *
- * @param {float} x The position on the X-Axis.
- * @param {float} y The position on the Y-Axis.
+ * @param {number} x The position on the X-Axis.
+ * @param {number} y The position on the Y-Axis.
  */
 lu.albert.closure.fx.easing.demo.Plotter.prototype.drawPoint = function(x, y) {
   var plotDims = {
@@ -324,7 +320,7 @@ lu.albert.closure.fx.easing.demo.Plotter.prototype.drawGrid = function() {
     height: (this.plotArea.bl.y - this.plotArea.tl.y) / 10};
 
   this.bgctx.beginPath();
-  for (i = 1; i <= 10; i++) {
+  for (var i = 1; i <= 10; i++) {
     this.bgctx.moveTo(
         this.plotArea.bl.x + i * cellSize.width, this.plotArea.bl.y);
     this.bgctx.lineTo(
@@ -337,3 +333,7 @@ lu.albert.closure.fx.easing.demo.Plotter.prototype.drawGrid = function() {
   this.bgctx.strokeStyle = this.gridColor;
   this.bgctx.stroke();
 };
+
+
+goog.exportSymbol('lu.albert.closure.fx.easing.demo',
+    lu.albert.closure.fx.easing.demo);

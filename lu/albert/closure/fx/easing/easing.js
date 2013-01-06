@@ -14,8 +14,8 @@ goog.require('goog.debug.Logger');
  * Calls function ``f`` while logging the resulting values if necessary.
  * Note: This expects the function ``f`` to take only one parameter!
  *
- * @param {function} f The function that needs logging.
- * @return {function} A function where the in/out parameter is logged.
+ * @param {function(number)} f The function that needs logging.
+ * @return {function(number)} A function where the in/out parameter is logged.
  */
 lu.albert.closure.fx.easing._loggedCall = function(f) {
 
@@ -37,8 +37,9 @@ lu.albert.closure.fx.easing._loggedCall = function(f) {
 /**
  * Creates an ease in/out function for polynomials.
  *
- * @param {int} p The power of the polynomial.
- * @return {function} A function which can be used for "in/out" easings.
+ * @param {number} p The power of the polynomial.
+ * @return {function(number)} A function which can be used for "in/out"
+ *                            easings.
  */
 lu.albert.closure.fx.easing._polynomialInOut = function(p) {
   var fun = function(x) {
@@ -60,8 +61,8 @@ lu.albert.closure.fx.easing._polynomialInOut = function(p) {
 /**
  * Creates an ease in function for polynomials.
  *
- * @param {int} p The power of the polynomial.
- * @return {function} A function which can be used for "in" easings.
+ * @param {number} p The power of the polynomial.
+ * @return {function(number)} A function which can be used for "in" easings.
  */
 lu.albert.closure.fx.easing._polynomialIn = function(p) {
   var fun = function(x) {
@@ -74,8 +75,8 @@ lu.albert.closure.fx.easing._polynomialIn = function(p) {
 /**
  * Creates an ease out function for polynomials.
  *
- * @param {int} p The power of the polynomial.
- * @return {function} A function which can be used for "out" easings.
+ * @param {number} p The power of the polynomial.
+ * @return {function(number)} A function which can be used for "out" easings.
  */
 lu.albert.closure.fx.easing._polynomialOut = function(p) {
   var fun = function(x) {
@@ -99,8 +100,8 @@ lu.albert.closure.fx.easing.Linear = function() {
  * This is just here for completeness. It calculates the position using a
  * linear speed. No acceleration, so it's fairly uninteresting.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.easeNone = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(function(p) {return p;});
@@ -112,8 +113,8 @@ lu.albert.closure.fx.easing.Linear.easeNone = function(p) {
  * Ease In function.
  * Identical to ``easeNone``.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.easeIn =
     lu.albert.closure.fx.easing.Linear.easeNone;
@@ -123,8 +124,8 @@ lu.albert.closure.fx.easing.Linear.easeIn =
  * Ease Out function.
  * Identical to ``easeNone``.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.easeOut =
     lu.albert.closure.fx.easing.Linear.easeNone;
@@ -133,8 +134,8 @@ lu.albert.closure.fx.easing.Linear.easeOut =
 /**
  * Ease InOut function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.easeInOut =
     lu.albert.closure.fx.easing.Linear.easeNone;
@@ -143,8 +144,8 @@ lu.albert.closure.fx.easing.Linear.easeInOut =
 /**
  * Ping-Pong function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Linear.pingPong = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(function(x) {
@@ -164,8 +165,8 @@ lu.albert.closure.fx.easing.Quad = function() {
 /**
  * Ease In function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -177,8 +178,8 @@ lu.albert.closure.fx.easing.Quad.easeIn = function(p) {
 /**
  * Ease Out function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -190,8 +191,8 @@ lu.albert.closure.fx.easing.Quad.easeOut = function(p) {
 /**
  * Ease InOut function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quad.easeInOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -210,8 +211,8 @@ lu.albert.closure.fx.easing.Cubic = function() {
 /**
  * Ease In function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -223,8 +224,8 @@ lu.albert.closure.fx.easing.Cubic.easeIn = function(p) {
 /**
  * Ease Out function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -236,8 +237,8 @@ lu.albert.closure.fx.easing.Cubic.easeOut = function(p) {
 /**
  * Ease InOut function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Cubic.easeInOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -256,8 +257,8 @@ lu.albert.closure.fx.easing.Quart = function() {
 /**
  * Ease In function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quart.easeIn = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -269,8 +270,8 @@ lu.albert.closure.fx.easing.Quart.easeIn = function(p) {
 /**
  * Ease Out function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quart.easeOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -282,8 +283,8 @@ lu.albert.closure.fx.easing.Quart.easeOut = function(p) {
 /**
  * Ease InOut function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quart.easeInOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -302,8 +303,8 @@ lu.albert.closure.fx.easing.Quint = function() {
 /**
  * Ease In function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quint.easeIn = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -315,8 +316,8 @@ lu.albert.closure.fx.easing.Quint.easeIn = function(p) {
 /**
  * Ease Out function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quint.easeOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -328,8 +329,8 @@ lu.albert.closure.fx.easing.Quint.easeOut = function(p) {
 /**
  * Ease InOut function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Quint.easeInOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -350,8 +351,8 @@ lu.albert.closure.fx.easing.Sine = function() {
  * Create a sinosoidal easing function. TIP: If the factor is even, the value
  * will return to 0. For uneven factors, it will move to 1.
  *
- * @param {int} f The factor (frequency).
- * @return {function} A function which can be used for easings.
+ * @param {number} f The factor (frequency).
+ * @return {function(number)} A function which can be used for easings.
  */
 lu.albert.closure.fx.easing.Sine._generic = function(f) {
   var fun = function(x) {
@@ -364,8 +365,8 @@ lu.albert.closure.fx.easing.Sine._generic = function(f) {
 /**
  * Ease InOut function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Sine.easeInOut = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(
@@ -376,8 +377,8 @@ lu.albert.closure.fx.easing.Sine.easeInOut = function(p) {
 /**
  * Ping-Pong function.
  *
- * @param {float} p parametric position.
- * @return {float} Translated parametric position.
+ * @param {number} p parametric position.
+ * @return {number} Translated parametric position.
  */
 lu.albert.closure.fx.easing.Sine.pingPong = function(p) {
   var f = lu.albert.closure.fx.easing._loggedCall(

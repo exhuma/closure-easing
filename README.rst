@@ -1,4 +1,4 @@
-Repository for my utility code for the google-closure library.
+Easing functions for the google-closure library.
 
 Demo
 ====

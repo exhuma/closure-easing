@@ -13,4 +13,4 @@ Before using ``make`` you should fix the plovr folder in the Makefile.
 Demo
 ====
 
-You can look at a live demo over at http://exhuma.github.com/closure
+You can look at a live demo over at http://exhuma.github.com/closure-easing

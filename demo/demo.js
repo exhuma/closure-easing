@@ -8,6 +8,9 @@ goog.require('goog.fx.dom');
 goog.require('goog.ui.ColorPalette');
 goog.require('goog.ui.ComboBox');
 goog.require('goog.ui.ComboBoxItem');
+goog.require('goog.ui.Component');
+goog.require('goog.ui.TabBar');
+goog.require('goog.style');
 
 goog.require('lu.albert.closure.fx.easing');
 goog.provide('lu.albert.closure.fx.easing.demo');
@@ -83,14 +86,15 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
 
   this.setUpLogging();
 
-  this.offsetX = 50;  // page margin.
-  this.offsetY = 50;  // page margin.
+  var dummyCanvas = goog.dom.getElement('DummyCanvas');
+
+  var canvas_offset = goog.style.getPosition(dummyCanvas);
   this.colorSwatch = goog.dom.getElement('ColorSwatch');
   this.sprite = goog.dom.getElement('Sprite');
-  this.sprite.style.position = 'relative';
+  this.sprite.style.position = 'absolute';
   this.sprite.style.backgroundColor = '#000';
-  this.sprite.style.left = '50px';
-  this.sprite.style.top = '50px';
+  this.sprite.style.left = (canvas_offset.x + 50) + 'px';
+  this.sprite.style.top = (canvas_offset.y + 50) + 'px';
   this.sprite.style.width = '50px';
   this.sprite.style.height = '50px';
   this.plotter = new lu.albert.closure.fx.easing.demo.Plotter(
@@ -98,16 +102,21 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
 
   this.setUpSelector('AccelSelector');
 
-  goog.events.listen(goog.dom.getElement('DummyCanvas'),
+  goog.events.listen(dummyCanvas,
       goog.events.EventType.CLICK,
       function(evt) {
           this.logConsole.clear();
           this.plotter.clear();
-          this.log.info('New click event! Clearing console...');
+          this.log.info('New click event on (' + evt.clientX +
+              ', ' + evt.clientY +
+              '). DummyCanvas offset: ' + canvas_offset);
+          this.log.info(this.sprite.style.left);
           var startx = parseInt(this.sprite.style.left.slice(0, -2), 10);
           var starty = parseInt(this.sprite.style.top.slice(0, -2), 10);
-          var endx = evt.clientX - 25 - this.offsetX;
-          var endy = evt.clientY - 25 - this.offsetY;
+          var endx = evt.clientX;
+          var endy = evt.clientY;
+          this.log.info('Moving from ' +
+            startx + ', ' + starty + ' to ' + endx + ', ' + endy + ').');
 
           var anim = new goog.fx.Animation([startx, starty], [endx, endy], 500,
             lu.albert.closure.fx.easing.demo._plotted(this.plotter,
@@ -149,6 +158,38 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
             this.easingFunction));
         anim.play();
       }, false, this);
+
+  var topTab = new goog.ui.TabBar();
+  topTab.decorate(goog.dom.getElement('top'));
+  var positioning_content = goog.dom.getElement('positioning_content')
+  var log_content = goog.dom.getElement('log_content')
+  var color_content = goog.dom.getElement('color_content')
+  var help_content = goog.dom.getElement('help_content')
+  goog.events.listen(topTab, goog.ui.Component.EventType.SELECT,
+      function(e) {
+        var tabSelected = e.target;
+        if (tabSelected.getCaption() == 'Help') {
+          goog.style.showElement(positioning_content, false);
+          goog.style.showElement(log_content, false);
+          goog.style.showElement(color_content, false);
+          goog.style.showElement(help_content, true);
+        } else if (tabSelected.getCaption() == 'Position Easing') {
+          goog.style.showElement(positioning_content, true);
+          goog.style.showElement(log_content, false);
+          goog.style.showElement(color_content, false);
+          goog.style.showElement(help_content, false);
+        } else if (tabSelected.getCaption() == 'Color Easing') {
+          goog.style.showElement(positioning_content, false);
+          goog.style.showElement(log_content, false);
+          goog.style.showElement(color_content, true);
+          goog.style.showElement(help_content, false);
+        } else if (tabSelected.getCaption() == 'Log') {
+          goog.style.showElement(positioning_content, false);
+          goog.style.showElement(log_content, true);
+          goog.style.showElement(color_content, false);
+          goog.style.showElement(help_content, false);
+        }
+      });
 
   this.log.info('Demo code successfully loaded!');
 

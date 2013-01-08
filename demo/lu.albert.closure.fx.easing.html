@@ -8,399 +8,66 @@
     server. The file "build.js" can be built by running `make` in the
     project folder.
 
-    <script type="text/javascript" src="http://localhost:9810/compile?id=dev"></script>
     -->
+    <script type="text/javascript" src="http://localhost:9810/compile?id=dev"></script>
 
-    <!-- The vompiled JS file -->
+    <!--
+    The compiled JS file
     <script type="text/javascript" src="build.js"></script>
-
-    <style type="text/css">
-      #DummyCanvas {
-        border: 1px solid black;
-        width: 640px;
-        height: 480px;
-      }
-      #LogConsole {
-        width: 640px;
-        height: 480px;
-        position: absolute;
-        left: 700px;
-        top: 50px;
-        border: 1px dashed #666;
-        overflow: auto;
-      }
-
-      #PlotBackground, #PlotForeground {
-          position: absolute;
-          left: 50px;
-          top: 540px;
-      }
-
-      #PlotBackground {
-          border: 1px solid black;
-          z-index: 0;
-      }
-
-      #PlotForeground {
-          z-index: 1;
-      }
-
-      #Help {
-          width: 200px;
-          font-size: small;
-          font-family: Vardana, Tahoma, Arial, sans-serif;
-          float: right;
-          border-left: 1px solid black;
-          border-bottom: 1px solid black;
-          padding: 1em;
-          margin-right: -50px;
-          margin-top: -50px;
-      }
-
-      #AccelSelector {
-          position: absolute;
-          top: 10px;
-          left: 50px;
-      }
-
-      #ColorSwatch {
-          position: absolute;
-          background-color: #000;
-          width: 100px;
-          height: 100px;
-          border: 1px solid black;
-          left: 400px;
-          top: 540px;
-      }
-
-      #btnPalette {
-          position: absolute;
-          left: 400px;
-          top: 650px;
-          border: 1px solid black;
-      }
-
-      BODY {
-          margin: 50px;
-      }
-    </style>
-    <style type="text/css" media="screen">
-        /*
-         * Copyright 2007 The Closure Library Authors. All Rights Reserved.
-         *
-         * Use of this source code is governed by the Apache License, Version 2.0.
-         * See the COPYING file for details.
-         */
-
-        /* Author: pupius@google.com (Daniel Pupius) */
-        /* Author: pallosp@google.com (Peter Pallos) */
-
-        /* Styles for goog.ui.ComboBox and its derivatives. */
-
-
-        .goog-combobox {
-          background: #ddd url(//ssl.gstatic.com/closure/button-bg.gif) repeat-x scroll left top;
-          border: 1px solid #b5b6b5;
-          font: normal small arial, sans-serif;
-        }
-
-        .goog-combobox input {
-          background-color: #fff;
-          border: 0;
-          border-right: 1px solid #b5b6b5;
-          color: #000;
-          font: normal small arial, sans-serif;
-          margin: 0;
-          padding: 0 0 0 2px;
-          vertical-align: bottom; /* override demo.css */
-          width: 200px;
-        }
-
-        .goog-combobox input.label-input-label {
-          background-color: #fff;
-          color: #aaa;
-        }
-
-        .goog-combobox .goog-menu {
-          margin-top: -1px;
-          width: 219px;  /* input width + button width + 3 * 1px border */
-          z-index: 1000;
-        }
-
-        .goog-combobox-button {
-          cursor: pointer;
-          display: inline-block;
-          font-size: 10px;
-          text-align: center;
-          width: 16px;
-        }
-
-        /* IE6 only hack */
-        * html .goog-combobox-button {
-          padding: 0 3px;
-        }
-    </style>
-    <style type="text/css" media="screen">
-        /*
-         * Copyright 2009 The Closure Library Authors. All Rights Reserved.
-         *
-         * Use of this source code is governed by the Apache License, Version 2.0.
-         * See the COPYING file for details.
-         */
-
-        /*
-         * Standard styling for menus created by goog.ui.MenuRenderer.
-         *
-         * @author attila@google.com (Attila Bodis)
-         */
-
-
-        .goog-menu {
-          background: #fff;
-          border-color: #ccc #666 #666 #ccc;
-          border-style: solid;
-          border-width: 1px;
-          cursor: default;
-          font: normal 13px Arial, sans-serif;
-          margin: 0;
-          outline: none;
-          padding: 4px 0;
-          position: absolute;
-          z-index: 20000; /* Arbitrary, but some apps depend on it... */
-        }
-    </style>
-    <style type="text/css" media="screen">
-        /*
-         * Copyright 2009 The Closure Library Authors. All Rights Reserved.
-         *
-         * Use of this source code is governed by the Apache License, Version 2.0.
-         * See the COPYING file for details.
-         */
-
-        /*
-         * Standard styling for menus created by goog.ui.MenuItemRenderer.
-         *
-         * @author attila@google.com (Attila Bodis)
-         */
-
-
-        /**
-         * State: resting.
-         *
-         * NOTE(mleibman,chrishenry):
-         * The RTL support in Closure is provided via two mechanisms -- "rtl" CSS
-         * classes and BiDi flipping done by the CSS compiler.  Closure supports RTL
-         * with or without the use of the CSS compiler.  In order for them not
-         * to conflict with each other, the "rtl" CSS classes need to have the @noflip
-         * annotation.  The non-rtl counterparts should ideally have them as well, but,
-         * since .goog-menuitem existed without .goog-menuitem-rtl for so long before
-         * being added, there is a risk of people having templates where they are not
-         * rendering the .goog-menuitem-rtl class when in RTL and instead rely solely
-         * on the BiDi flipping by the CSS compiler.  That's why we're not adding the
-         * @noflip to .goog-menuitem.
-         */
-        .goog-menuitem {
-          color: #000;
-          font: normal 13px Arial, sans-serif;
-          list-style: none;
-          margin: 0;
-          /* 28px on the left for icon or checkbox; 7em on the right for shortcut. */
-          padding: 4px 7em 4px 28px;
-          white-space: nowrap;
-        }
-
-        /* BiDi override for the resting state. */
-        /* @noflip */
-        .goog-menuitem.goog-menuitem-rtl {
-          /* Flip left/right padding for BiDi. */
-          padding-left: 7em;
-          padding-right: 28px;
-        }
-
-        /* If a menu doesn't have checkable items or items with icons, remove padding. */
-        .goog-menu-nocheckbox .goog-menuitem,
-        .goog-menu-noicon .goog-menuitem {
-          padding-left: 12px;
-        }
-
-        /*
-         * If a menu doesn't have items with shortcuts, leave just enough room for
-         * submenu arrows, if they are rendered.
-         */
-        .goog-menu-noaccel .goog-menuitem {
-          padding-right: 20px;
-        }
-
-        .goog-menuitem-content {
-          color: #000;
-          font: normal 13px Arial, sans-serif;
-        }
-
-        /* State: disabled. */
-        .goog-menuitem-disabled .goog-menuitem-accel,
-        .goog-menuitem-disabled .goog-menuitem-content {
-          color: #ccc !important;
-        }
-        .goog-menuitem-disabled .goog-menuitem-icon {
-          opacity: 0.3;
-          -moz-opacity: 0.3;
-          filter: alpha(opacity=30);
-        }
-
-        /* State: hover. */
-        .goog-menuitem-highlight,
-        .goog-menuitem-hover {
-          background-color: #d6e9f8;
-          /* Use an explicit top and bottom border so that the selection is visible
-           * in high contrast mode. */
-          border-color: #d6e9f8;
-          border-style: dotted;
-          border-width: 1px 0;
-          padding-bottom: 3px;
-          padding-top: 3px;
-        }
-
-        /* State: selected/checked. */
-        .goog-menuitem-checkbox,
-        .goog-menuitem-icon {
-          background-repeat: no-repeat;
-          height: 16px;
-          left: 6px;
-          position: absolute;
-          right: auto;
-          vertical-align: middle;
-          width: 16px;
-        }
-
-        /* BiDi override for the selected/checked state. */
-        /* @noflip */
-        .goog-menuitem-rtl .goog-menuitem-checkbox,
-        .goog-menuitem-rtl .goog-menuitem-icon {
-          /* Flip left/right positioning. */
-          left: auto;
-          right: 6px;
-        }
-
-        .goog-option-selected .goog-menuitem-checkbox,
-        .goog-option-selected .goog-menuitem-icon {
-          /* Client apps may override the URL at which they serve the sprite. */
-          background: url(//ssl.gstatic.com/editor/editortoolbar.png) no-repeat -512px 0;
-        }
-
-        /* Keyboard shortcut ("accelerator") style. */
-        .goog-menuitem-accel {
-          color: #999;
-          /* Keyboard shortcuts are untranslated; always left-to-right. */
-          /* @noflip */ direction: ltr;
-          left: auto;
-          padding: 0 6px;
-          position: absolute;
-          right: 0;
-          text-align: right;
-        }
-
-        /* BiDi override for shortcut style. */
-        /* @noflip */
-        .goog-menuitem-rtl .goog-menuitem-accel {
-          /* Flip left/right positioning and text alignment. */
-          left: 0;
-          right: auto;
-          text-align: left;
-        }
-
-        /* Mnemonic styles. */
-        .goog-menuitem-mnemonic-hint {
-          text-decoration: underline;
-        }
-
-        .goog-menuitem-mnemonic-separator {
-          color: #999;
-          font-size: 12px;
-          padding-left: 4px;
-        }
-    </style>
-    <style type="text/css" media="screen">
-        /*
-         * Copyright 2009 The Closure Library Authors. All Rights Reserved.
-         *
-         * Use of this source code is governed by the Apache License, Version 2.0.
-         * See the COPYING file for details.
-         */
-
-        /*
-         * Standard styling for color palettes.
-         *
-         * @author pupius@google.com (Daniel Pupius)
-         * @author attila@google.com (Attila Bodis)
-         */
-
-
-        .goog-palette-cell .goog-palette-colorswatch {
-          border: none;
-          font-size: x-small;
-          height: 18px;
-          position: relative;
-          width: 18px;
-        }
-
-        .goog-palette-cell-hover .goog-palette-colorswatch {
-          border: 1px solid #fff;
-          height: 16px;
-          width: 16px;
-        }
-
-        .goog-palette-cell-selected .goog-palette-colorswatch {
-          /* Client apps may override the URL at which they serve the sprite. */
-          background: url(//ssl.gstatic.com/editor/editortoolbar.png) no-repeat -368px 0;
-          border: 1px solid #333;
-          color: #fff;
-          font-weight: bold;
-          height: 16px;
-          width: 16px;
-        }
-
-        .goog-palette-customcolor {
-          background-color: #fafafa;
-          border: 1px solid #eee;
-          color: #666;
-          font-size: x-small;
-          height: 15px;
-          position: relative;
-          width: 15px;
-        }
-
-        .goog-palette-cell-hover .goog-palette-customcolor {
-          background-color: #fee;
-          border: 1px solid #f66;
-          color: #f66;
-        }
-    </style>
+    -->
+    <link rel="stylesheet" href="demo.css" />
+    <link rel="stylesheet" href="combobox.css" />
+    <link rel="stylesheet" href="menu.css" />
+    <link rel="stylesheet" href="menuitem.css" />
+    <link rel="stylesheet" href="palette.css" />
+    <link rel="stylesheet" href="tab.css">
+    <link rel="stylesheet" href="tabbar.css">
 </head>
 <body>
     <a href="https://github.com/exhuma/closure"><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_gray_6d6d6d.png" alt="Fork me on GitHub"></a>
-    <div id="Help">
-        <h4>Help</h4>
-        <br /> <br />
-        <br /> <br />
-        Click into <strong>the left rectangle</strong> to trigger the animation
-        with the selected easing function.
-        <br/><br />
-        The <strong>plotter</strong> shows the speed in function of position/time.
-        <br/><br />
-        The <strong>logger</strong> displays the raw data values (rounded to 3
-        decimal places).
-        <br/><br />
-        Clicking on a <strong>color swatch in the palette</strong> will trigger
-        a simple RGB based color blend. Again using the selected easing
-        function.
+
+    <div id="demo">
+        <div id="AccelSelector"></div>
+        <div id="top" class="goog-tab-bar goog-tab-bar-top">
+            <div class="goog-tab goog-tab-selected">Help</div>
+            <div class="goog-tab">Position Easing</div>
+            <div class="goog-tab">Color Easing</div>
+            <div class="goog-tab">Log</div>
+        </div>
+        <!-- Use goog-tab-bar-clear to separate the tabs from the content. -->
+        <div class="goog-tab-bar-clear"></div>
+        <div id="top_content" class="goog-tab-content">
+            <div id="positioning_content">
+                <div id="DummyCanvas"><div id="Sprite"></div></div>
+            </div>
+            <div id="log_content">
+                <div id="LogConsole"></div>
+            </div>
+            <div id="color_content">
+                <div id="ColorSwatch"></div>
+                <div id="btnPalette"></div>
+            </div>
+            <div id="help_content">
+                <h4>Help</h4>
+                <br /> <br />
+                <br /> <br />
+                Click into <strong>the left rectangle</strong> to trigger the animation
+                with the selected easing function.
+                <br/><br />
+                The <strong>plotter</strong> shows the speed in function of position/time.
+                <br/><br />
+                The <strong>logger</strong> displays the raw data values (rounded to 3
+                decimal places).
+                <br/><br />
+                Clicking on a <strong>color swatch in the palette</strong> will trigger
+                a simple RGB based color blend. Again using the selected easing
+                function.
+            </div>
+        </div>
     </div>
-    <div id="AccelSelector"></div>
-    <div id="DummyCanvas"><div id="Sprite"></div></div>
-    <div id="LogConsole"></div>
     <canvas id="PlotForeground" width="300" height="300"></canvas>
     <canvas id="PlotBackground" width="300" height="300"></canvas>
-    <div id="ColorSwatch"></div>
-    <div id="btnPalette"></div>
+
     <script type="text/javascript" charset="utf-8">
         var app = new lu.albert.closure.fx.easing.demo();
         app.init();

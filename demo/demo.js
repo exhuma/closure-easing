@@ -159,12 +159,31 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
         anim.play();
       }, false, this);
 
+  this.setUpTabBar('top');
+
+  this.log.info('Demo code successfully loaded!');
+
+};
+
+
+/**
+ * Sets up the tab bar
+ *
+ * @param {string} id The HTML ID of the container of the tabs
+ */
+lu.albert.closure.fx.easing.demo.prototype.setUpTabBar = function(id) {
   var topTab = new goog.ui.TabBar();
-  topTab.decorate(goog.dom.getElement('top'));
+  topTab.decorate(goog.dom.getElement(id));
   var positioning_content = goog.dom.getElement('positioning_content')
   var log_content = goog.dom.getElement('log_content')
   var color_content = goog.dom.getElement('color_content')
   var help_content = goog.dom.getElement('help_content')
+
+  goog.style.showElement(positioning_content, false);
+  goog.style.showElement(log_content, false);
+  goog.style.showElement(color_content, false);
+  goog.style.showElement(help_content, true);
+
   goog.events.listen(topTab, goog.ui.Component.EventType.SELECT,
       function(e) {
         var tabSelected = e.target;
@@ -190,9 +209,6 @@ lu.albert.closure.fx.easing.demo.prototype.init = function() {
           goog.style.showElement(help_content, false);
         }
       });
-
-  this.log.info('Demo code successfully loaded!');
-
 };
 
 
